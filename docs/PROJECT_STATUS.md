@@ -97,7 +97,18 @@ running the code:
 
 **Backend:** foundation complete. 1 of ~10 planned feature modules exists (health).
 **Database:** 0 collections designed. Phase 2 is next.
-**Mobile pages:** 1 of ~30 (the temporary health screen). 0 product pages.
+**Mobile pages:** 3 product screens complete, plus the temporary health screen.
+
+| Screen | Stitch ID | Status |
+|---|---|---|
+| Splash | `70ccef9d…` | COMPLETE |
+| Welcome & Onboarding (step 1) | `862135f8…` | COMPLETE |
+| Onboarding — Turn Extra Food (step 2) | `ccb514b6…` | COMPLETE |
+| Onboarding — Every Rescue Counts (step 3) | `2d98bc12…` | Not started |
+
+Flow wired: Splash -> Welcome -> Turn Extra Food. `Skip`, `Sign in`, and step 2's
+`Continue` have no destination yet — they need the login screen and onboarding step 3,
+which are out of scope until instructed.
 **Dashboard pages:** 0 of ~10.
 **Tests:** 8 total (4 backend, 4 widget).
 

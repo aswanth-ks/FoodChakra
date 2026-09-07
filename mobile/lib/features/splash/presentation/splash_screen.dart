@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -13,11 +15,17 @@ import '../../../app/theme/app_typography.dart';
 /// The design's status bar and home-indicator are device chrome mockups — the
 /// operating system draws those, so they are deliberately not reproduced.
 ///
-/// Navigation is intentionally NOT wired up: the post-splash destination
-/// depends on auth and role, which do not exist yet (Phase 3). See
-/// `docs/PROJECT_STATUS.md`.
+/// Once the entrance animation finishes the screen advances to onboarding.
+/// The design specifies no hold duration, so a short one is used to let the
+/// reveal be seen. Phase 3 will replace this with an auth/role-aware redirect
+/// that skips onboarding for returning users.
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  const SplashScreen({super.key, this.onComplete});
+
+  /// Called once the entrance animation has finished and rested. The router
+  /// supplies the destination, so this screen stays navigation-agnostic and
+  /// testable without a router.
+  final VoidCallback? onComplete;
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -34,6 +42,9 @@ class _SplashScreenState extends State<SplashScreen>
   /// `cubic-bezier(0.16, 1, 0.3, 1)` from the design.
   static const Curve _easing = Cubic(0.16, 1, 0.3, 1);
 
+  /// How long the finished composition rests before advancing.
+  static const Duration _hold = Duration(milliseconds: 600);
+
   late final AnimationController _controller;
 
   late final Animation<double> _logoOpacity;
@@ -41,6 +52,9 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _wordmarkOpacity;
   late final Animation<double> _wordmarkOffset;
   late final Animation<double> _taglineOpacity;
+
+  bool _started = false;
+  Timer? _advanceTimer;
 
   @override
   void initState() {
@@ -55,12 +69,21 @@ class _SplashScreenState extends State<SplashScreen>
     _taglineOpacity = _fade(startMs: 380);
   }
 
+  void _scheduleAdvance() {
+    _advanceTimer = Timer(_timeline + _hold, () {
+      if (mounted) widget.onComplete?.call();
+    });
+  }
+
   CurvedAnimation _interval(int startMs) {
     final begin = startMs / _timeline.inMilliseconds;
     return CurvedAnimation(
       parent: _controller,
-      curve: Interval(begin, (begin + _elementSpan).clamp(0.0, 1.0),
-          curve: _easing),
+      curve: Interval(
+        begin,
+        (begin + _elementSpan).clamp(0.0, 1.0),
+        curve: _easing,
+      ),
     );
   }
 
@@ -71,15 +94,20 @@ class _SplashScreenState extends State<SplashScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     // The design shows everything immediately when reduced motion is requested.
+    if (_started) return;
+    _started = true;
+
     if (MediaQuery.disableAnimationsOf(context)) {
       _controller.value = 1;
-    } else if (!_controller.isAnimating && _controller.value == 0) {
+    } else {
       _controller.forward();
     }
+    _scheduleAdvance();
   }
 
   @override
   void dispose() {
+    _advanceTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -167,10 +195,8 @@ class _AnimatedWordmark extends StatelessWidget {
       opacity: opacity,
       child: AnimatedBuilder(
         animation: offset,
-        builder: (context, child) => Transform.translate(
-          offset: Offset(0, offset.value),
-          child: child,
-        ),
+        builder: (context, child) =>
+            Transform.translate(offset: Offset(0, offset.value), child: child),
         child: Text('FoodLoop', style: AppTypography.splashWordmark),
       ),
     );

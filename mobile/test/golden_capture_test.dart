@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,7 +14,7 @@ void main() {
     final bytes = File('assets/fonts/PlusJakartaSans[wght].ttf')
         .readAsBytesSync();
     final loader = FontLoader('PlusJakartaSans')
-      ..addFont(Future.value(ByteData.view(Uint8List.fromList(bytes).buffer)));
+      ..addFont(Future.value(ByteData.view(bytes.buffer)));
     await loader.load();
   });
 

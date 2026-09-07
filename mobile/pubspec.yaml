@@ -64,6 +64,7 @@ flutter:
 
   assets:
     - assets/brand/
+    - assets/images/
 
   # Plus Jakarta Sans is the Stitch design system typeface. It is bundled
   # rather than fetched at runtime so the splash screen never waits on the
