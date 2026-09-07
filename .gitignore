@@ -1,0 +1,67 @@
+# ==========================================================
+# FoodLoop — root ignore rules
+# ==========================================================
+
+# ----- Secrets (NEVER commit) -----
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+*.keystore
+*.jks
+**/google-services.json
+**/GoogleService-Info.plist
+**/service-account*.json
+
+# ----- OS / editor -----
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+*.swp
+
+# ----- Python / FastAPI -----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ----- Node / Dashboard -----
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+npm-debug.log*
+
+# ----- Flutter / Dart -----
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.g.dart.lock
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/key.properties
+mobile/.flutter-plugins*
+
+# Generated Dart sources are committed for reproducible builds:
+# (freezed / json_serializable output is NOT ignored on purpose)
+
+# ----- Logs / temp -----
+*.log
+tmp/
+temp/
