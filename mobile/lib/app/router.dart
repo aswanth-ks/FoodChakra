@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/presentation/sign_in_screen.dart';
 import '../features/health/presentation/health_screen.dart';
 import '../features/onboarding/presentation/impact_screen.dart';
+import '../features/onboarding/presentation/location_setup_screen.dart';
 import '../features/onboarding/presentation/share_surplus_screen.dart';
 import '../features/onboarding/presentation/welcome_screen.dart';
 import '../features/splash/presentation/splash_screen.dart';
@@ -22,6 +23,7 @@ class AppRoutes {
   static const String welcome = '/onboarding/welcome';
   static const String shareSurplus = '/onboarding/share';
   static const String impact = '/onboarding/impact';
+  static const String locationSetup = '/onboarding/location';
 
   // Phase 3
   static const String login = '/login';
@@ -71,7 +73,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'impact',
         builder: (context, state) => ImpactScreen(
           onSignIn: () => context.push(AppRoutes.login),
-          // "Start rescuing" leads to account creation, not yet implemented.
+          onStartRescuing: () => context.push(AppRoutes.locationSetup),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.locationSetup,
+        name: 'locationSetup',
+        builder: (context, state) => LocationSetupScreen(
+          onBack: () => context.canPop() ? context.pop() : null,
+          // Skip / Enable location / Not now all continue past onboarding,
+          // which needs account creation (not yet implemented).
         ),
       ),
       GoRoute(
