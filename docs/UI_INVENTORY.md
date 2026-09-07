@@ -87,21 +87,21 @@ onto Flutter's `ColorScheme`.
 | Location Setup | `cce80807fdbe43e28fe84d970260b8f4` | `/onboarding/location` | Not built |
 | Consumer Sign In | `266ac1989d5a4f338f57c6c51b367936` | `/login` | Not built |
 | Consumer Account Creation | `2abb740e1ba741bfa7b7c6a6acdc1e7f` | `/register` | Not built |
-| Consumer Email Verification | `e8885e82739a4d58a8736084dad28b36` | `/verify-email` | Not built |
-| Consumer Forgot Password | `21993dcd125d4786bb20d167e90c2747` | `/forgot-password` | Not built |
+| Consumer Email Verification | `e8885e82739a4d58a8736084dad28b36` | `/verify-email` | Built (`EmailVerificationScreen`, UI only) |
+| Consumer Forgot Password | `21993dcd125d4786bb20d167e90c2747` | `/forgot-password` | Built (`ForgotPasswordScreen`, UI only) |
 
 ### Consumer — discovery and rescue
 
 | Screen | Screen ID | Route | Status |
 |---|---|---|---|
-| Consumer Home | `ec02ee8746be482d8c189b1a0c8f1ae7` | `/home` | Not built |
-| Consumer Explore Food | `03d1ce15100b42a2bddce7b60f3274df` | `/explore` | Not built |
-| Consumer Food Details | `87586e9ef13d4197977c3d229a7a4b91` | `/food/:id` | Not built |
-| Consumer Rescue Confirmation Sheet | `a1032738300c4089ab43b5b3a57ed769` | sheet | Not built |
+| Consumer Home | `ec02ee8746be482d8c189b1a0c8f1ae7` | `/home` | Built (`HomeScreen`, UI only) |
+| Consumer Explore Food | `03d1ce15100b42a2bddce7b60f3274df` | `/explore` | Built (`ExploreScreen`, UI only) |
+| Consumer Food Details | `87586e9ef13d4197977c3d229a7a4b91` | `/food/:id` | Built (`FoodDetailsScreen`, UI only) |
+| Consumer Rescue Confirmation Sheet | `a1032738300c4089ab43b5b3a57ed769` | sheet | Built (`showRescueConfirmationSheet`, UI only) |
 | Consumer Live Rescue Matching | `0483482c28fe4d19932a48305d8d054f` | `/rescue/matching` | Not built |
-| Consumer Rescuer Found | `e722e6e8aa6c4460b93d55a5310a6f28` | `/rescue/found` | Not built |
-| Consumer Active Rescue | `8a01e8c064ff4d16ad96343f5ad4d6c4` | `/rescue/:id` | Not built |
-| Consumer Rescue Complete | `41bd3493561546c4af16f9bf8ccdc75e` | `/rescue/:id/complete` | Not built |
+| Consumer Rescuer Found | `e722e6e8aa6c4460b93d55a5310a6f28` | `/rescue/:id/found` | Built (`RescuerFoundScreen`, UI only) |
+| Consumer Active Rescue | `8a01e8c064ff4d16ad96343f5ad4d6c4` | `/rescue/:id` | Built (`ActiveRescueScreen`, maps hand-off live) |
+| Consumer Rescue Complete | `41bd3493561546c4af16f9bf8ccdc75e` | `/rescue/:id/complete` | Built (`RescueCompleteScreen`, UI only) |
 
 ### Consumer — giving surplus
 
@@ -116,9 +116,9 @@ onto Flutter's `ColorScheme`.
 
 | Screen | Screen ID | Route | Status |
 |---|---|---|---|
-| Consumer Activity | `3e283e153cb14c248d37838d9255e1bb` | `/activity` | Not built |
-| Consumer My Impact | `193a47c489864bfca7fce11800f7ce35` | `/impact` | Not built |
-| Consumer Profile | `1c0764bd3d524834be8cb9cb61e9900f` | `/profile` | Not built |
+| Consumer Activity | `3e283e153cb14c248d37838d9255e1bb` | `/activity` | Built (`ActivityScreen`, UI only) |
+| Consumer My Impact | `193a47c489864bfca7fce11800f7ce35` | `/impact` | Built (`MyImpactScreen`, UI only) |
+| Consumer Profile | `1c0764bd3d524834be8cb9cb61e9900f` | `/profile` | Built (`ProfileScreen`, UI only) |
 
 ### Restaurant Partner
 
@@ -166,12 +166,25 @@ belongs here.
 | `EmptyStateView` | `empty_state_view.dart` | Successful but empty result |
 | `ErrorStateView` | `error_state_view.dart` | Failure message + retry |
 
-### Identified in the designs — to build in Phase 4
+### Built (Phase 4)
+
+Auth chrome lives in `features/auth/presentation/widgets/auth_widgets.dart`; the consumer
+rescue chrome lives in `features/rescue/presentation/widgets/rescue_widgets.dart`. Each owns
+the palette its designs share (`AuthColors`, `RescueColors`).
+
+| Component | File | Purpose |
+|---|---|---|
+| `AuthTextField` / `AuthPrimaryButton` / `AuthSocialButton` / `AuthDivider` / `AuthFooterPrompt` | `auth_widgets.dart` | Sign In, Create Account, Forgot Password, Email Verification |
+| `ConsumerNavBar` | `shared/widgets/consumer_nav_bar.dart` | Five consumer tabs: **Home · Explore · Activity · Impact · Profile** |
+| `RescueCard` / `LivePill` / `LiveDot` / `RescueChip` / `SectionHeader` / `IconTile` / `DetailRow` / `RescuePrimaryButton` / `RescueMiniButton` / `RescueIconButton` | `rescue_widgets.dart` | Home, Food Details, Confirmation Sheet, Active Rescue |
+| `ListingCard` | `features/home/presentation/home_screen.dart` | Home's nearby opportunity row |
+| `ExploreListingCard` | `rescue/presentation/explore_screen.dart` | Explore's result row — a distinct composition (92px photo, distance chip, ruled footer), not a variant of `ListingCard` |
+| `NearbyMap` / `RouteMap` | `rescue/presentation/widgets/stylised_map.dart` | The designs' stylised SVG maps, as `CustomPainter`s. **Phase 8 replaces both with a real map.** |
+
+### Identified in the designs — still to build
 
 | Component | Seen on | Notes |
 |---|---|---|
-| `AppBottomNav` | all Consumer screens | Tabs: **Discover · My Rescues · Impact · Profile** |
-| `FoodCard` | Explore, Home, Activity | The most reused component |
 | `StatusBadge` | throughout | States seen: **Reserved · Confirmed · Ready · Active Handshake · Live Context** |
 | `MapDiscoveryModule` | Explore, Live Rescue Map | "Spatial Hub" map card |
 | `HandoverPinDisplay` | Handover Verification | "Store Handshake PIN" |

@@ -1,14 +1,30 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/presentation/create_account_screen.dart';
+import '../features/auth/presentation/email_verification_screen.dart';
+import '../features/auth/presentation/forgot_password_screen.dart';
 import '../features/auth/presentation/sign_in_screen.dart';
 import '../features/health/presentation/health_screen.dart';
+import '../features/home/presentation/home_screen.dart';
 import '../features/onboarding/presentation/impact_screen.dart';
 import '../features/onboarding/presentation/location_setup_screen.dart';
 import '../features/onboarding/presentation/share_surplus_screen.dart';
 import '../features/onboarding/presentation/welcome_screen.dart';
+import '../features/rescue/data/sample_listings.dart';
+import '../features/rescue/presentation/active_rescue_screen.dart';
+import '../features/rescue/presentation/activity_screen.dart';
+import '../features/rescue/presentation/explore_screen.dart';
+import '../features/rescue/presentation/food_details_screen.dart';
+import '../features/rescue/presentation/my_impact_screen.dart';
+import '../features/rescue/presentation/profile_screen.dart';
+import '../features/rescue/presentation/rescue_complete_screen.dart';
+import '../features/rescue/presentation/rescuer_found_screen.dart';
+import '../features/rescue/presentation/widgets/rescue_confirmation_sheet.dart';
 import '../features/splash/presentation/splash_screen.dart';
+import '../features/rescue/domain/activity_item.dart';
+import '../shared/widgets/consumer_nav_bar.dart';
 
 /// Named route paths. Screens navigate with these constants, never string
 /// literals, so a path change is a one-line edit.
@@ -30,12 +46,45 @@ class AppRoutes {
   static const String login = '/login';
   static const String register = '/register';
   static const String createAccount = '/create-account';
+  static const String forgotPassword = '/forgot-password';
+  static const String verifyEmail = '/verify-email';
+
+  // Consumer discovery and rescue
+  static const String home = '/home';
+  static const String explore = '/explore';
+  static const String activity = '/activity';
+
+  /// Distinct from [impact], which is the onboarding screen.
+  static const String myImpact = '/impact';
+  static const String profile = '/profile';
+  static const String foodDetails = '/food/:id';
+  static const String activeRescue = '/rescue/:id';
+  static const String rescuerFound = '/rescue/:id/found';
+  static const String rescueComplete = '/rescue/:id/complete';
+
+  static String foodDetailsFor(String id) => '/food/$id';
+  static String activeRescueFor(String id) => '/rescue/$id';
+  static String rescuerFoundFor(String id) => '/rescue/$id/found';
+  static String rescueCompleteFor(String id) => '/rescue/$id/complete';
 
   // Phase 5-7 role home routes
   static const String donorHome = '/donor';
   static const String receiverHome = '/receiver';
   static const String volunteerHome = '/volunteer';
 }
+
+/// The `:id` path parameter shared by the food and rescue routes.
+String listingId(GoRouterState state) => state.pathParameters['id'] ?? '';
+
+/// Bottom-nav routing. Only Home and Explore have screens so far; the other
+/// three tabs stay inert until theirs are built.
+void onConsumerTab(BuildContext context, ConsumerTab tab) => switch (tab) {
+  ConsumerTab.home => context.go(AppRoutes.home),
+  ConsumerTab.explore => context.go(AppRoutes.explore),
+  ConsumerTab.activity => context.go(AppRoutes.activity),
+  ConsumerTab.impact => context.go(AppRoutes.myImpact),
+  ConsumerTab.profile => context.go(AppRoutes.profile),
+};
 
 /// App router.
 ///
@@ -93,8 +142,159 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => CreateAccountScreen(
           onBack: () => context.canPop() ? context.pop() : null,
           onSignIn: () => context.push(AppRoutes.login),
-          // Skip / Create account / Google / Apple / Terms / Privacy stay
-          // inert until the Phase 3 auth service exists.
+          // The form validates locally, then hands off to email verification.
+          // Nothing is persisted until the Phase 3 auth service exists.
+          onCreateAccount: (_, email, _) => context.push(
+            Uri(
+              path: AppRoutes.verifyEmail,
+              queryParameters: {'email': email},
+            ).toString(),
+          ),
+          // Skip / Google / Apple / Terms / Privacy stay inert until the
+          // Phase 3 auth service exists.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.verifyEmail,
+        name: 'verifyEmail',
+        builder: (context, state) => EmailVerificationScreen(
+          email: state.uri.queryParameters['email'] ?? '',
+          onBack: () => context.canPop() ? context.pop() : null,
+          onChangeEmail: () => context.canPop() ? context.pop() : null,
+          // The code is not checked against anything yet; entering six digits
+          // lands on Home so the consumer flow is reachable. Phase 3 replaces
+          // this with a real verification call.
+          onVerify: (_) => context.go(AppRoutes.home),
+          // onResend stays null until the Phase 3 auth service exists.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.home,
+        name: 'home',
+        builder: (context, state) => HomeScreen(
+          onOpenListing: (listing) =>
+              context.push(AppRoutes.foodDetailsFor(listing.id)),
+          // All three routes into discovery land on Explore.
+          onRescueFood: () => context.go(AppRoutes.explore),
+          onExploreNearby: () => context.go(AppRoutes.explore),
+          onSeeAll: () => context.go(AppRoutes.explore),
+          onViewImpact: () => context.push(AppRoutes.myImpact),
+          onSelectTab: (tab) => onConsumerTab(context, tab),
+          // Give food, the notification bell and the Activity / Impact /
+          // Profile tabs need screens that do not exist yet.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.explore,
+        name: 'explore',
+        builder: (context, state) => ExploreScreen(
+          onOpenListing: (listing) =>
+              context.push(AppRoutes.foodDetailsFor(listing.id)),
+          onSelectTab: (tab) => onConsumerTab(context, tab),
+          // Filters and Change location need Phase 5 query support.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.foodDetails,
+        name: 'foodDetails',
+        builder: (context, state) {
+          final listing = SampleListings.byId(listingId(state));
+          return FoodDetailsScreen(
+            listing: listing,
+            onBack: () => context.canPop() ? context.pop() : null,
+            onRescue: () async {
+              final confirmed = await showRescueConfirmationSheet(
+                context,
+                listing: listing,
+              );
+              if (confirmed ?? false) {
+                if (!context.mounted) return;
+                context.push(AppRoutes.rescuerFoundFor(listing.id));
+              }
+            },
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.profile,
+        name: 'profile',
+        builder: (context, state) => ProfileScreen(
+          onBack: context.canPop() ? () => context.pop() : null,
+          onSelectTab: (tab) => onConsumerTab(context, tab),
+          // There is no session to end until Phase 3, so signing out just
+          // returns to the start of the flow. The screen confirms first.
+          onSignOut: () => context.go(AppRoutes.welcome),
+          // Every settings row needs a screen that does not exist yet, so
+          // they stay inert rather than pointing at placeholders.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.myImpact,
+        name: 'myImpact',
+        builder: (context, state) => MyImpactScreen(
+          // Reached from Home's "View impact" as well as the nav tab; the
+          // back arrow only appears when there is something to pop.
+          onBack: context.canPop() ? () => context.pop() : null,
+          onViewAll: () => context.go(AppRoutes.activity),
+          onSelectTab: (tab) => onConsumerTab(context, tab),
+          // The methodology note needs copy that does not exist yet.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.activity,
+        name: 'activity',
+        builder: (context, state) => ActivityScreen(
+          onSelectTab: (tab) => onConsumerTab(context, tab),
+          // A rescue in flight opens Active Rescue. A share still being
+          // matched needs the Live Rescue Matching screen, which is not built
+          // yet, so it stays inert.
+          onOpenActivity: (item) {
+            if (item.kind == ActivityKind.rescue) {
+              context.push(AppRoutes.activeRescueFor(item.id));
+            }
+          },
+          // Filter needs Phase 5 query support.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.rescuerFound,
+        name: 'rescuerFound',
+        builder: (context, state) => RescuerFoundScreen(
+          listing: SampleListings.byId(listingId(state)),
+          onBack: () => context.canPop() ? context.pop() : null,
+          onViewActiveRescue: () =>
+              context.push(AppRoutes.activeRescueFor(listingId(state))),
+          // "Done" leaves the rescue running in the background, so the whole
+          // stack is dropped rather than popped one screen at a time.
+          onDone: () => context.go(AppRoutes.home),
+          // Help needs the Phase 5 support surface, so it stays inert.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.activeRescue,
+        name: 'activeRescue',
+        builder: (context, state) => ActiveRescueScreen(
+          listing: SampleListings.byId(listingId(state)),
+          onBack: () =>
+              context.canPop() ? context.pop() : context.go(AppRoutes.home),
+          // Stands in for the partner's handover confirmation until Phase 5.
+          onCollected: () =>
+              context.push(AppRoutes.rescueCompleteFor(listingId(state))),
+          // Start navigation / View route hand off to the device's maps app
+          // from inside the screen. Help / Something wrong? / Cancel rescue
+          // need the Phase 5 rescue service, so they stay inert.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.rescueComplete,
+        name: 'rescueComplete',
+        builder: (context, state) => RescueCompleteScreen(
+          listing: SampleListings.byId(listingId(state)),
+          onBack: () => context.canPop() ? context.pop() : null,
+          // Home is the start of the flow, so the whole rescue stack is
+          // dropped rather than pushed on top of.
+          onBackToHome: () => context.go(AppRoutes.home),
+          // View my impact needs the Impact screen, which is not built yet.
         ),
       ),
       GoRoute(
@@ -102,9 +302,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'login',
         builder: (context, state) => SignInScreen(
           onBack: () => context.canPop() ? context.pop() : null,
-          onForgotPassword: () {},
+          onForgotPassword: () => context.push(AppRoutes.forgotPassword),
           onCreateAccount: () => context.push(AppRoutes.createAccount),
           // onSignIn stays null until the auth service exists (Phase 3).
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        name: 'forgotPassword',
+        builder: (context, state) => ForgotPasswordScreen(
+          onBack: () => context.canPop() ? context.pop() : null,
+          onBackToSignIn: () =>
+              context.canPop() ? context.pop() : context.go(AppRoutes.login),
+          // onSendResetLink stays null until the Phase 3 auth service exists.
         ),
       ),
       GoRoute(

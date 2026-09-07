@@ -97,7 +97,7 @@ running the code:
 
 **Backend:** foundation complete. 1 of ~10 planned feature modules exists (health).
 **Database:** 0 collections designed. Phase 2 is next.
-**Mobile pages:** 7 product screens complete, plus the temporary health screen.
+**Mobile pages:** 19 product screens complete, plus the temporary health screen.
 
 | Screen | Stitch ID | Status |
 |---|---|---|
@@ -108,10 +108,24 @@ running the code:
 | Location Setup | `cce80807…` | COMPLETE (real permission flow) |
 | Consumer Account Creation | `2abb740e…` | COMPLETE (UI only) |
 | Consumer Sign In | `266ac198…` | COMPLETE (UI only) |
+| Consumer Forgot Password | `21993dcd…` | COMPLETE (UI only) |
+| Consumer Email Verification | `e8885e82…` | COMPLETE (UI only) |
+| Consumer Home | `ec02ee87…` | COMPLETE (UI only) |
+| Consumer Explore Food | `03d1ce15…` | COMPLETE (UI only) |
+| Consumer Activity | `3e283e15…` | COMPLETE (UI only) |
+| Consumer My Impact | `193a47c4…` | COMPLETE (UI only) |
+| Consumer Profile | `1c0764bd…` | COMPLETE (UI only) |
+| Consumer Food Details | `87586e9e…` | COMPLETE (UI only) |
+| Consumer Rescue Confirmation Sheet | `a1032738…` | COMPLETE (UI only) |
+| Consumer Rescuer Found | `e722e6e8…` | COMPLETE (UI only) |
+| Consumer Active Rescue | `8a01e8c0…` | COMPLETE (maps hand-off live) |
+| Consumer Rescue Complete | `41bd3493…` | COMPLETE (UI only) |
 
 Flow wired: Splash -> Welcome -> Turn Extra Food -> Every Rescue Counts. Verified running on the Android emulator. `Skip`, `Sign in`, and step 2's
 `Continue` have no destination yet — they need the login screen and onboarding step 3,
-which are out of scope until instructed. `Sign in` on all three onboarding screens now opens the Sign In screen. `Start rescuing` now opens Location Setup, whose Skip / Enable location / Not now need Account Creation; Sign In's submit, `Forgot password?`, `Create one` and the Google/Apple buttons stay inert until the Phase 3 auth service exists.
+which are out of scope until instructed. `Sign in` on all three onboarding screens now opens the Sign In screen. `Start rescuing` now opens Location Setup, whose Skip / Enable location / Not now need Account Creation; Sign In's `Forgot password?` now opens the Forgot Password screen; its submit, `Create one` and the Google/Apple buttons stay inert until the Phase 3 auth service exists. Forgot Password's `Send reset link` validates the email locally but does not call a backend until Phase 3. Account Creation's `Create account`, once the form validates, now pushes the Email Verification screen (`/verify-email?email=…`); its OTP row, `Resend code` (30s countdown) and `Change email` (pops back) are UI only until Phase 3; entering six digits lands on Home so the consumer flow is reachable.
+
+**Consumer rescue flow wired:** Home (`/home`) -> tap a nearby opportunity -> Food Details (`/food/:id`) -> `Rescue this food` -> Rescue Confirmation sheet -> tick the commitment box -> `Confirm rescue` (reserving -> confirmed) -> Active Rescue (`/rescue/:id`). Listings come from `features/rescue/data/sample_listings.dart`, the Stitch fixtures — **Phase 5 deletes that file** and feeds the same constructor parameters from a repository. On Active Rescue, `Start navigation`, `View route` and tapping the map are live: they hand off to the device's maps app via `core/navigation/maps_launcher.dart` (universal Google Maps HTTPS links, so Maps opens when installed and the browser otherwise), and show a SnackBar when nothing can handle the link. Confirming the rescue now lands on Rescuer Found (`/rescue/:id/found`) — the match confirmation, whose own primary CTA is `View active rescue` — and that leads to Active Rescue; its `Done` drops the stack back to Home, leaving the rescue running. Active Rescue then leads to Rescue Complete (`/rescue/:id/complete`), whose `Back to home` drops the whole rescue stack. **Design divergence:** the Stitch Active Rescue screen has no forward action — it assumes a live backend advances the stage as the partner verifies the handover. Until that exists, an outlined `I have collected this food` button stands in, deliberately secondary to `Start navigation`. Remove it once the Phase 5 rescue stream drives the stage to `collected` on its own. Explore (`/explore`) is now the destination for Home's `Rescue food` card, `Explore nearby` and `See all`, and for the Explore nav tab; its cards open Food Details, joining the same rescue flow. Its search box, filter chips and List/Map toggle hold local state but do not filter yet — Phase 5 sends the query to the listings API. The Map half shows an honest placeholder until Phase 8. Activity (`/activity`) is wired to its nav tab, with Active/History segments; an in-flight rescue's `View rescue` opens Active Rescue. **Design divergence:** the Stitch mock carries a generic top app bar titled "Item Details" — a leftover from its template — which is omitted, since Activity is a nav destination and takes its title from the heading block like Home and Explore. A share's `Matching status` needs Live Rescue Matching (`0483482c…`), which is not built, so it stays inert. My Impact (`/impact`, constant `AppRoutes.myImpact` — distinct from the onboarding `impact` route) is wired to its nav tab and to Home's `View impact`; its back arrow only renders when there is something to pop, its time-range pill opens a working selector, and `View all` goes to Activity. Profile (`/profile`) completes the bottom nav — **all five consumer tabs are now wired**. Its ten settings rows stay inert rather than pointing at placeholders, since none of those screens exist. `Sign out` confirms in a dialog, then returns to Welcome; there is no session to end until Phase 3. Still inert, pending their own screens or the rescue service: Give food / notifications / Explore's Filters and Change location / Activity's filter / My Impact's methodology info / Profile's settings rows and Edit profile, Active Rescue's help, Something wrong? and Cancel rescue, and Rescue Complete's `View my impact`. The two maps are `CustomPainter` translations of the designs' SVG geometry, not real cartography — Phase 8 replaces them.
 **Dashboard pages:** 0 of ~10.
 **Tests:** 8 total (4 backend, 4 widget).
 
