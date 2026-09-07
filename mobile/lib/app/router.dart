@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/presentation/sign_in_screen.dart';
 import '../features/health/presentation/health_screen.dart';
 import '../features/onboarding/presentation/impact_screen.dart';
 import '../features/onboarding/presentation/share_surplus_screen.dart';
@@ -54,7 +55,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'welcome',
         builder: (context, state) => WelcomeScreen(
           onGetStarted: () => context.push(AppRoutes.shareSurplus),
-          // Skip and Sign in have no destination until auth lands in Phase 3.
+          onSignIn: () => context.push(AppRoutes.login),
         ),
       ),
       GoRoute(
@@ -62,13 +63,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'shareSurplus',
         builder: (context, state) => ShareSurplusScreen(
           onContinue: () => context.push(AppRoutes.impact),
+          onSignIn: () => context.push(AppRoutes.login),
         ),
       ),
       GoRoute(
         path: AppRoutes.impact,
         name: 'impact',
-        builder: (context, state) => const ImpactScreen(
-          // "Start rescuing" has no destination until auth lands in Phase 3.
+        builder: (context, state) => ImpactScreen(
+          onSignIn: () => context.push(AppRoutes.login),
+          // "Start rescuing" leads to account creation, not yet implemented.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.login,
+        name: 'login',
+        builder: (context, state) => SignInScreen(
+          onBack: () => context.canPop() ? context.pop() : null,
+          onForgotPassword: () {},
+          onCreateAccount: () {},
+          // onSignIn stays null until the auth service exists (Phase 3).
         ),
       ),
       GoRoute(

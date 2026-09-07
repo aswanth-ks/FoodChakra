@@ -97,7 +97,7 @@ running the code:
 
 **Backend:** foundation complete. 1 of ~10 planned feature modules exists (health).
 **Database:** 0 collections designed. Phase 2 is next.
-**Mobile pages:** 4 product screens complete, plus the temporary health screen.
+**Mobile pages:** 5 product screens complete, plus the temporary health screen.
 
 | Screen | Stitch ID | Status |
 |---|---|---|
@@ -105,10 +105,11 @@ running the code:
 | Welcome & Onboarding (step 1) | `862135f8…` | COMPLETE |
 | Onboarding — Turn Extra Food (step 2) | `ccb514b6…` | COMPLETE |
 | Onboarding — Every Rescue Counts (step 3) | `2d98bc12…` | COMPLETE |
+| Consumer Sign In | `266ac198…` | COMPLETE (UI only) |
 
 Flow wired: Splash -> Welcome -> Turn Extra Food -> Every Rescue Counts. Verified running on the Android emulator. `Skip`, `Sign in`, and step 2's
 `Continue` have no destination yet — they need the login screen and onboarding step 3,
-which are out of scope until instructed. `Start rescuing` likewise has no destination until Phase 3.
+which are out of scope until instructed. `Sign in` on all three onboarding screens now opens the Sign In screen. `Start rescuing` needs Account Creation; Sign In's submit, `Forgot password?`, `Create one` and the Google/Apple buttons stay inert until the Phase 3 auth service exists.
 **Dashboard pages:** 0 of ~10.
 **Tests:** 8 total (4 backend, 4 widget).
 
