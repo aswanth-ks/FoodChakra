@@ -23,10 +23,14 @@ class OnboardingColors {
   static const Color body = Color(0xFF4F6355);
   static const Color muted = Color(0xFF56695D);
   static const Color skip = Color(0xFF5C7162);
+
+  /// Lighter supporting text used on the impact screen.
+  static const Color skipAlt = Color(0xFF7A8C81);
   static const Color signInPrompt = Color(0xFF667A6D);
 
   static const Color dotInactive = Color(0xFFD5DCD7);
   static const Color dotInactiveAlt = Color(0xFFD1D9D3);
+  static const Color dotInactiveImpact = Color(0xFFD2DFD6);
   static const Color hairline = Color(0xFFE5ECE7);
   static const Color tintSurface = Color(0xFFEDF4EF);
   static const Color chipSurface = Color(0xFFF4F3F0);
@@ -152,21 +156,29 @@ class OnboardingPrimaryButton extends StatelessWidget {
             disabledBackgroundColor: OnboardingColors.forest,
             disabledForegroundColor: Colors.white,
             elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: AppTypography.fontFamily,
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.w600,
-                  fontVariations: const [FontVariation('wght', 600)],
-                  letterSpacing: -0.01 * fontSize,
+              // Flexible so a long label shrinks instead of overflowing the
+              // row on narrow phones.
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: AppTypography.fontFamily,
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w600,
+                    fontVariations: const [FontVariation('wght', 600)],
+                    letterSpacing: -0.01 * fontSize,
+                  ),
                 ),
               ),
               const SizedBox(width: 9),
@@ -181,10 +193,18 @@ class OnboardingPrimaryButton extends StatelessWidget {
 
 /// "Already have an account? Sign in"
 class OnboardingSignInPrompt extends StatelessWidget {
-  const OnboardingSignInPrompt({super.key, this.onSignIn, this.fontSize = 14});
+  const OnboardingSignInPrompt({
+    super.key,
+    this.onSignIn,
+    this.fontSize = 14,
+    this.promptColor = OnboardingColors.signInPrompt,
+    this.linkColor = OnboardingColors.forest,
+  });
 
   final VoidCallback? onSignIn;
   final double fontSize;
+  final Color promptColor;
+  final Color linkColor;
 
   @override
   Widget build(BuildContext context) {
@@ -193,7 +213,7 @@ class OnboardingSignInPrompt extends StatelessWidget {
       fontSize: fontSize,
       fontWeight: FontWeight.w400,
       fontVariations: const [FontVariation('wght', 400)],
-      color: OnboardingColors.signInPrompt,
+      color: promptColor,
     );
 
     return Text.rich(
@@ -209,7 +229,7 @@ class OnboardingSignInPrompt extends StatelessWidget {
               child: Text(
                 'Sign in',
                 style: base.copyWith(
-                  color: OnboardingColors.forest,
+                  color: linkColor,
                   fontWeight: FontWeight.w600,
                   fontVariations: const [FontVariation('wght', 600)],
                 ),

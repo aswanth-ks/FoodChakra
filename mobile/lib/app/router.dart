@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/health/presentation/health_screen.dart';
+import '../features/onboarding/presentation/impact_screen.dart';
 import '../features/onboarding/presentation/share_surplus_screen.dart';
 import '../features/onboarding/presentation/welcome_screen.dart';
 import '../features/splash/presentation/splash_screen.dart';
@@ -19,6 +20,7 @@ class AppRoutes {
   // Onboarding
   static const String welcome = '/onboarding/welcome';
   static const String shareSurplus = '/onboarding/share';
+  static const String impact = '/onboarding/impact';
 
   // Phase 3
   static const String login = '/login';
@@ -58,8 +60,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.shareSurplus,
         name: 'shareSurplus',
-        builder: (context, state) => const ShareSurplusScreen(
-          // Continue leads to onboarding step 3, not yet implemented.
+        builder: (context, state) => ShareSurplusScreen(
+          onContinue: () => context.push(AppRoutes.impact),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.impact,
+        name: 'impact',
+        builder: (context, state) => const ImpactScreen(
+          // "Start rescuing" has no destination until auth lands in Phase 3.
         ),
       ),
       GoRoute(
