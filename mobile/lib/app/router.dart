@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/presentation/create_account_screen.dart';
 import '../features/auth/presentation/sign_in_screen.dart';
 import '../features/health/presentation/health_screen.dart';
 import '../features/onboarding/presentation/impact_screen.dart';
@@ -28,6 +29,7 @@ class AppRoutes {
   // Phase 3
   static const String login = '/login';
   static const String register = '/register';
+  static const String createAccount = '/create-account';
 
   // Phase 5-7 role home routes
   static const String donorHome = '/donor';
@@ -48,9 +50,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.splash,
         name: 'splash',
-        builder: (context, state) => SplashScreen(
-          onComplete: () => context.go(AppRoutes.welcome),
-        ),
+        builder: (context, state) =>
+            SplashScreen(onComplete: () => context.go(AppRoutes.welcome)),
       ),
       GoRoute(
         path: AppRoutes.welcome,
@@ -81,8 +82,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'locationSetup',
         builder: (context, state) => LocationSetupScreen(
           onBack: () => context.canPop() ? context.pop() : null,
-          // Skip / Enable location / Not now all continue past onboarding,
-          // which needs account creation (not yet implemented).
+          // Whatever the location outcome, a new user lands on account
+          // creation next — there is no further onboarding screen.
+          onContinue: (_) => context.go(AppRoutes.createAccount),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.createAccount,
+        name: 'createAccount',
+        builder: (context, state) => CreateAccountScreen(
+          onBack: () => context.canPop() ? context.pop() : null,
+          onSignIn: () => context.push(AppRoutes.login),
+          // Skip / Create account / Google / Apple / Terms / Privacy stay
+          // inert until the Phase 3 auth service exists.
         ),
       ),
       GoRoute(
@@ -91,7 +103,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => SignInScreen(
           onBack: () => context.canPop() ? context.pop() : null,
           onForgotPassword: () {},
-          onCreateAccount: () {},
+          onCreateAccount: () => context.push(AppRoutes.createAccount),
           // onSignIn stays null until the auth service exists (Phase 3).
         ),
       ),

@@ -46,6 +46,8 @@
 				</dict>
 			</array>
 		</dict>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>FoodLoop uses your location to show nearby rescue opportunities and calculate pickup distances.</string>
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>

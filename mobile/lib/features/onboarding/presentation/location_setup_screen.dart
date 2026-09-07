@@ -1,28 +1,34 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_typography.dart';
+import '../../../core/location/location_service.dart';
 
 /// "FoodLoop Location Setup Screen".
 ///
 /// Faithful translation of the Stitch design
 /// (screen `cce80807fdbe43e28fe84d970260b8f4`).
 ///
-/// UI only. No location permission is requested and no platform location API is
-/// touched — [onEnableLocation] is wired to the real permission flow in Phase
-/// 13 (Maps). Adding a geolocation dependency now would be premature.
+/// "Enable location" triggers the real Android/iOS permission prompt through
+/// [LocationService] — set the emulator's location under Extended Controls ->
+/// Location to see a real coordinate returned. Whatever the outcome (granted,
+/// denied, or the plugin being unavailable, e.g. in a test), [onContinue]
+/// still fires so the user is never stranded on this screen; only the
+/// snackbar shown differs.
 class LocationSetupScreen extends StatefulWidget {
   const LocationSetupScreen({
     super.key,
     this.onBack,
-    this.onSkip,
-    this.onEnableLocation,
-    this.onNotNow,
+    this.onContinue,
+    this.locationService = const LocationService(),
   });
 
   final VoidCallback? onBack;
-  final VoidCallback? onSkip;
-  final VoidCallback? onEnableLocation;
-  final VoidCallback? onNotNow;
+
+  /// Called once the user has moved past this screen, by any of the three
+  /// exits (Skip, Not now, or a resolved Enable-location attempt).
+  final void Function(LocationOutcome outcome)? onContinue;
+
+  final LocationService locationService;
 
   @override
   State<LocationSetupScreen> createState() => _LocationSetupScreenState();
@@ -31,6 +37,7 @@ class LocationSetupScreen extends StatefulWidget {
 class _LocationSetupScreenState extends State<LocationSetupScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _radar;
+  bool _requesting = false;
 
   @override
   void initState() {
@@ -56,6 +63,32 @@ class _LocationSetupScreenState extends State<LocationSetupScreen>
     super.dispose();
   }
 
+  Future<void> _enableLocation() async {
+    setState(() => _requesting = true);
+    final result = await widget.locationService.requestLocation();
+    if (!mounted) return;
+    setState(() => _requesting = false);
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(SnackBar(content: Text(_messageFor(result))));
+    widget.onContinue?.call(result.outcome);
+  }
+
+  String _messageFor(LocationResult result) => switch (result.outcome) {
+    LocationOutcome.granted =>
+      result.position != null
+          ? 'Location enabled '
+                '(${result.position!.latitude.toStringAsFixed(4)}, '
+                '${result.position!.longitude.toStringAsFixed(4)}).'
+          : 'Location enabled.',
+    LocationOutcome.denied => 'Location permission was not granted.',
+    LocationOutcome.deniedForever =>
+      'Location is blocked. You can enable it later in system settings.',
+    LocationOutcome.serviceDisabled =>
+      'Turn on device location to use this feature.',
+    LocationOutcome.unavailable => 'Could not get your location right now.',
+  };
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -69,7 +102,11 @@ class _LocationSetupScreenState extends State<LocationSetupScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _TopBar(onBack: widget.onBack, onSkip: widget.onSkip),
+                  _TopBar(
+                    onBack: widget.onBack,
+                    onSkip: () =>
+                        widget.onContinue?.call(LocationOutcome.denied),
+                  ),
                   Expanded(
                     child: SingleChildScrollView(
                       child: Column(
@@ -85,10 +122,15 @@ class _LocationSetupScreenState extends State<LocationSetupScreen>
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _EnableLocationButton(onPressed: widget.onEnableLocation),
+                  _EnableLocationButton(
+                    loading: _requesting,
+                    onPressed: _requesting ? null : _enableLocation,
+                  ),
                   const SizedBox(height: 4),
                   TextButton(
-                    onPressed: widget.onNotNow,
+                    onPressed: _requesting
+                        ? null
+                        : () => widget.onContinue?.call(LocationOutcome.denied),
                     style: TextButton.styleFrom(
                       foregroundColor: LocationColors.inkMuted,
                       padding: const EdgeInsets.symmetric(
@@ -619,9 +661,10 @@ class _TextBlock extends StatelessWidget {
 }
 
 class _EnableLocationButton extends StatelessWidget {
-  const _EnableLocationButton({this.onPressed});
+  const _EnableLocationButton({this.onPressed, this.loading = false});
 
   final VoidCallback? onPressed;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
@@ -653,22 +696,31 @@ class _EnableLocationButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.location_on_outlined, size: 16),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  'Enable location',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: _font(15.5, 600, Colors.white),
+          child: loading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.location_on_outlined, size: 16),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Enable location',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _font(15.5, 600, Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

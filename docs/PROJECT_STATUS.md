@@ -97,7 +97,7 @@ running the code:
 
 **Backend:** foundation complete. 1 of ~10 planned feature modules exists (health).
 **Database:** 0 collections designed. Phase 2 is next.
-**Mobile pages:** 6 product screens complete, plus the temporary health screen.
+**Mobile pages:** 7 product screens complete, plus the temporary health screen.
 
 | Screen | Stitch ID | Status |
 |---|---|---|
@@ -105,7 +105,8 @@ running the code:
 | Welcome & Onboarding (step 1) | `862135f8…` | COMPLETE |
 | Onboarding — Turn Extra Food (step 2) | `ccb514b6…` | COMPLETE |
 | Onboarding — Every Rescue Counts (step 3) | `2d98bc12…` | COMPLETE |
-| Location Setup | `cce80807…` | COMPLETE (UI only) |
+| Location Setup | `cce80807…` | COMPLETE (real permission flow) |
+| Consumer Account Creation | `2abb740e…` | COMPLETE (UI only) |
 | Consumer Sign In | `266ac198…` | COMPLETE (UI only) |
 
 Flow wired: Splash -> Welcome -> Turn Extra Food -> Every Rescue Counts. Verified running on the Android emulator. `Skip`, `Sign in`, and step 2's
