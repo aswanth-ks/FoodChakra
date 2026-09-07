@@ -71,7 +71,7 @@ running the code:
 
 | # | Blocker | Impact | Owner |
 |---|---|---|---|
-| B1 | **No MongoDB connection string.** `MONGO_URI` is a local placeholder and nothing is listening on 27017. | `/health` reports `degraded`. Phase 2 cannot be implemented. | User — create an Atlas M0 cluster and paste the URI into `backend/.env`. |
+| B1 | **Cannot reach MongoDB Atlas — outbound port 27017 appears blocked on this network.** The Atlas URI is configured in `backend/.env` and is valid: the SRV record resolves to the real shard hosts (`ac-hpbwtyy-shard-00-0{0,1,2}.9qy2c0c.mongodb.net`). All three refuse TCP on 27017, while ports 80/443 connect fine and every non-standard high port tested (8080, 27017, 27018) is refused after a uniform ~2s. The failure is at TCP connect, **before authentication** — so the password is not the problem. | `/health` reports `degraded`. Phase 2 cannot be verified against a real cluster. | User — (a) add public IP `115.244.249.170` to Atlas Network Access, and (b) if it still fails, switch network (mobile hotspot) or run MongoDB locally via Docker. |
 | ~~B2~~ | ~~Stitch designs not accessible.~~ **RESOLVED** — Stitch MCP connected at local scope; 46 mobile + 2 ops screens inventoried in `docs/UI_INVENTORY.md`. | — | Done |
 | B3 | **Exposed API key.** The Stitch key was pasted into chat twice and must be considered compromised. It is stored in `~/.claude.json` (outside the repo, not in git). | Security. | User — rotate it, then re-run `claude mcp add`. |
 | B4 | **Android licenses not accepted; no emulator.** | App runs only in Chrome. Camera, GPS, and push cannot be validated. | User — `flutter doctor --android-licenses`, then create an AVD. Needed before Phase 5. |
