@@ -1,6 +1,6 @@
 # FoodLoop — Project Status
 
-**Last updated:** 2026-09-07
+**Last updated:** 2026-09-07 (Stitch MCP connected)
 **Current phase:** Phase 2 — Database Design (not started)
 **Phases complete:** 0 (Foundation), 1 (Architecture)
 
@@ -72,11 +72,12 @@ running the code:
 | # | Blocker | Impact | Owner |
 |---|---|---|---|
 | B1 | **No MongoDB connection string.** `MONGO_URI` is a local placeholder and nothing is listening on 27017. | `/health` reports `degraded`. Phase 2 cannot be implemented. | User — create an Atlas M0 cluster and paste the URI into `backend/.env`. |
-| B2 | **Stitch designs not accessible.** The Stitch MCP server is not configured, and it cannot be authorized from a non-interactive session. | Phase 4 blocked. Theme tokens remain placeholders. | User — run `claude mcp add` in an interactive terminal. |
-| B3 | **Exposed API key.** A live key was pasted into chat and must be considered compromised. | Security. | User — rotate it, store the new value in `.env` only. |
+| ~~B2~~ | ~~Stitch designs not accessible.~~ **RESOLVED** — Stitch MCP connected at local scope; 46 mobile + 2 ops screens inventoried in `docs/UI_INVENTORY.md`. | — | Done |
+| B3 | **Exposed API key.** The Stitch key was pasted into chat twice and must be considered compromised. It is stored in `~/.claude.json` (outside the repo, not in git). | Security. | User — rotate it, then re-run `claude mcp add`. |
 | B4 | **Android licenses not accepted; no emulator.** | App runs only in Chrome. Camera, GPS, and push cannot be validated. | User — `flutter doctor --android-licenses`, then create an AVD. Needed before Phase 5. |
 | B5 | **Visual Studio Build Tools incomplete.** | Windows desktop target broken. | Low priority — not a target platform. |
 | B6 | **Docker Desktop not running.** | Could not verify the live-DB `ok` path locally. | Optional — B1 resolves this instead. |
+| **B7** | **Role model mismatch.** The designs use **Consumer** + **Restaurant Partner**, not the donor/receiver/volunteer trio in the brief. A Consumer both gives and rescues food; there is no separate volunteer role. | **Blocks Phase 2 and 3** — changes the `users` schema and the auth role enum. | **User — decide the role model.** See `docs/UI_INVENTORY.md`. |
 
 ---
 
@@ -84,7 +85,7 @@ running the code:
 
 | # | Item | Plan |
 |---|---|---|
-| D1 | Theme tokens are invented placeholders. | Replace with the exact Stitch palette in Phase 4. |
+| D1 | Theme tokens are invented placeholders and **confirmed wrong** (bright `#2E7D32` green vs the real `#183B2B` Primary Forest; cool canvas vs warm `#FAF9F6`). Font should be Plus Jakarta Sans. | Replace with the extracted "Verdant Precision" tokens — values are in `docs/UI_INVENTORY.md`. Ready to do now. |
 | D2 | The health screen is scaffolding, not product. | Delete once real screens exist (Phase 4). |
 | D3 | `ensure_indexes()` is an empty stub. | Populate in Phase 2 alongside `docs/DATABASE.md`. |
 | D4 | Dashboard uses inline styles. | Adopt a styling approach in Phase 14. |

@@ -227,6 +227,33 @@ cp .env.example .env
 npm run dev        # http://localhost:5173
 ```
 
+### 4. Stitch designs (design source of truth)
+
+The approved UI lives in Stitch and is pulled through an MCP server. Configure it once:
+
+```bash
+claude mcp add stitch -s local -e STITCH_API_KEY=<your-key>   -- npx -y @_davideast/stitch-mcp@0.9.0 proxy
+```
+
+`-s local` keeps the key in `~/.claude.json`, **outside the repository**. Never put it in a
+tracked file.
+
+Verify and browse:
+
+```bash
+export STITCH_API_KEY=<your-key>
+npx @_davideast/stitch-mcp doctor                 # check auth
+npx @_davideast/stitch-mcp tool list_projects     # find project IDs
+npx @_davideast/stitch-mcp view --projects        # interactive browser
+```
+
+Projects: **FoodLoop Mobile Design System** (`11421962422199014836`) and
+**FoodLoop Operations Console** (`8883198284374486482`). The full screen inventory and the
+extracted design tokens are in [`docs/UI_INVENTORY.md`](docs/UI_INVENTORY.md).
+
+> `@_davideast/stitch-mcp` is an independent, experimental package — not an official Google
+> product, and provided with no warranty.
+
 ### Running the checks
 
 ```bash
