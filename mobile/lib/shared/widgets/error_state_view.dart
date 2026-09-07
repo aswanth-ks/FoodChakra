@@ -26,7 +26,7 @@ class ErrorStateView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(_iconFor(failure), size: 56, color: AppColors.danger),
+            Icon(_iconFor(failure), size: 56, color: AppColors.error),
             const SizedBox(height: AppSpacing.lg),
             Text(
               'Something went wrong',
@@ -39,7 +39,7 @@ class ErrorStateView extends StatelessWidget {
               failure?.message ?? 'Please try again.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: AppColors.textSecondary,
+                color: AppColors.onSurfaceVariant,
               ),
             ),
             if (onRetry != null) ...[

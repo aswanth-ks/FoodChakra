@@ -38,6 +38,7 @@ dependencies:
   go_router: ^18.0.1
   dio: ^5.11.1
   flutter_secure_storage: ^11.0.0
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +61,18 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/brand/
+
+  # Plus Jakarta Sans is the Stitch design system typeface. It is bundled
+  # rather than fetched at runtime so the splash screen never waits on the
+  # network. This is the variable font, so styles set the `wght` axis via
+  # `fontVariations` (see lib/app/theme/app_typography.dart).
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans[wght].ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

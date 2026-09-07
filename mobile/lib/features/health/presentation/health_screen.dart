@@ -89,7 +89,7 @@ class _HealthDetails extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.check_circle, color: AppColors.success),
+                    const Icon(Icons.check_circle, color: AppColors.secondary),
                     const SizedBox(width: AppSpacing.sm),
                     Text(
                       'All systems connected',
@@ -129,7 +129,7 @@ class _Row extends StatelessWidget {
             width: 110,
             child: Text(
               label,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: const TextStyle(color: AppColors.onSurfaceVariant),
             ),
           ),
           Expanded(

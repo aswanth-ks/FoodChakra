@@ -16,6 +16,12 @@ class AppSpacing {
 
   /// Standard horizontal page padding.
   static const double pageHorizontal = 16;
+
+  /// Stitch `gutter-mobile` (1.25rem). The mobile screen gutter.
+  static const double gutterMobile = 20;
+
+  /// Stitch `gutter-desktop` (2rem).
+  static const double gutterDesktop = 32;
 }
 
 class AppRadius {

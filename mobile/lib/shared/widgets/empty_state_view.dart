@@ -33,7 +33,7 @@ class EmptyStateView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: AppColors.textDisabled),
+            Icon(icon, size: 56, color: AppColors.outline),
             const SizedBox(height: AppSpacing.lg),
             Text(
               title,
@@ -48,7 +48,7 @@ class EmptyStateView extends StatelessWidget {
                 message!,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: AppColors.onSurfaceVariant,
                 ),
               ),
             ],
