@@ -5,15 +5,19 @@ import OverviewPage from './features/overview/OverviewPage';
 import LiveRescueMapPage from './features/rescues/LiveRescueMapPage';
 import RescueDetailPage from './features/rescues/RescueDetailPage';
 import CoveragePage from './features/rescues/CoveragePage';
+import RescueQueuePage from './features/rescues/RescueQueuePage';
+import EscalationPage from './features/rescues/EscalationPage';
+import AnalyticsPage from './features/analytics/AnalyticsPage';
 import HealthPage from './features/health/HealthPage';
 
 /**
  * Operations Console routes.
  *
- * Overview, Live Rescues and the rescue detail view are built. The other
- * console destinations appear in the sidebar as disabled rows rather than
- * routes to empty pages, so the nav shows the shape of the console without
- * pretending those screens exist.
+ * Overview, Live Rescues (with the rescue detail and coverage views), Rescue
+ * Queue, Escalations and Analytics are built. The remaining console
+ * destinations appear in the sidebar as disabled rows rather than routes to
+ * empty pages, so the nav shows the shape of the console without pretending
+ * those screens exist.
  */
 export default function App() {
   return (
@@ -48,6 +52,30 @@ export default function App() {
         element={
           <RequireAuth>
             <CoveragePage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/rescue-queue"
+        element={
+          <RequireAuth>
+            <RescueQueuePage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/escalations"
+        element={
+          <RequireAuth>
+            <EscalationPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <RequireAuth>
+            <AnalyticsPage />
           </RequireAuth>
         }
       />

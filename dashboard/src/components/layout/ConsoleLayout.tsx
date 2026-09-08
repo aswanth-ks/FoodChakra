@@ -21,10 +21,16 @@ const MAIN_NAV: NavEntry[] = [
     path: '/live-rescues',
     count: 42,
   },
-  { label: 'Rescue Queue', icon: 'inbox' },
-  { label: 'Escalations', icon: 'warning', count: 3, alert: true },
+  { label: 'Rescue Queue', icon: 'inbox', path: '/rescue-queue', count: 42 },
+  {
+    label: 'Escalations',
+    icon: 'warning',
+    path: '/escalations',
+    count: 3,
+    alert: true,
+  },
   { label: 'Zero-Waste Network', icon: 'hub' },
-  { label: 'Analytics', icon: 'insights' },
+  { label: 'Analytics', icon: 'insights', path: '/analytics' },
 ];
 
 const MANAGEMENT_NAV: NavEntry[] = [
@@ -37,9 +43,10 @@ const MANAGEMENT_NAV: NavEntry[] = [
 /**
  * The console frame: fixed sidebar, fixed topbar, scrolling content.
  *
- * Overview and Live Rescues are built; every other destination renders as a
- * disabled row rather than a link to nothing. They keep their counts because
- * those come from the same fixtures the built pages use.
+ * Overview, Live Rescues, Rescue Queue, Escalations and Analytics are built;
+ * every other destination renders as a disabled row rather than a link to
+ * nothing. They keep their counts because those come from the same fixtures
+ * the built pages use.
  */
 export default function ConsoleLayout({
   title,

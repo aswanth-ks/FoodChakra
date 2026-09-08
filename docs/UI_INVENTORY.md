@@ -145,9 +145,9 @@ onto Flutter's `ColorScheme`.
 | Rescue Opportunity Detail | Mobile DS | `804145037efc453ab479efffe0867c56` | Built (`/live-rescues/:id`) |
 | Overview | Ops Console | `6d0e54157764439abe027aefe7303a8d` | Built (`/overview`) |
 | Dynamic Rescue Coverage | Mobile DS | `d944fd65322b4b6c883e39a2bac4159a` | Built (`/live-rescues/:id/coverage`) |
-| Smart Escalation | Mobile DS | `04f4eb21239a4f9fa5a3c4108afcf70f` | Not built |
-| Rescue Queue | Mobile DS | `5f3fede2b5f74d57834db003fcfc2d66` | Not built |
-| Escalations / Analytics | Mobile DS | `425247d520024816b1f7cc5891946928` | Not built |
+| Smart Escalation | Mobile DS | `04f4eb21239a4f9fa5a3c4108afcf70f` | Built (`/escalations`) |
+| Rescue Queue | Mobile DS | `5f3fede2b5f74d57834db003fcfc2d66` | Built (`/rescue-queue`) |
+| Analytics | Mobile DS | `425247d520024816b1f7cc5891946928` | Built (`/analytics`) |
 | Restaurants | Mobile DS | `0db51c916c3441faa27126cf53fa3b05` | Not built |
 | Restaurant Onboarding: Step 1 | Mobile DS | `7ef47ae53bc945adb7a1444678d3d754` | Not built |
 | Restaurant Onboarding: Step 2 | Mobile DS | `ab93f88ddd2c4670aad9771485e0803d` | Not built |

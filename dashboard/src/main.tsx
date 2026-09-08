@@ -7,6 +7,7 @@ import './styles/tokens.css';
 import './styles/console.css';
 import './styles/rescues.css';
 import './styles/coverage.css';
+import './styles/tables.css';
 
 const queryClient = new QueryClient();
 
