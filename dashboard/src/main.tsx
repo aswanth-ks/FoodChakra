@@ -8,6 +8,7 @@ import './styles/console.css';
 import './styles/rescues.css';
 import './styles/coverage.css';
 import './styles/tables.css';
+import './styles/onboarding.css';
 
 const queryClient = new QueryClient();
 

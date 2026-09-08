@@ -8,6 +8,7 @@ import CoveragePage from './features/rescues/CoveragePage';
 import RescueQueuePage from './features/rescues/RescueQueuePage';
 import EscalationPage from './features/rescues/EscalationPage';
 import AnalyticsPage from './features/analytics/AnalyticsPage';
+import OnboardingWizard from './features/restaurants/OnboardingWizard';
 import HealthPage from './features/health/HealthPage';
 
 /**
@@ -76,6 +77,20 @@ export default function App() {
         element={
           <RequireAuth>
             <AnalyticsPage />
+          </RequireAuth>
+        }
+      />
+      {/* The three onboarding steps share one route so the draft survives
+          moving between them. */}
+      <Route
+        path="/restaurants/onboard"
+        element={<Navigate to="/restaurants/onboard/1" replace />}
+      />
+      <Route
+        path="/restaurants/onboard/:step"
+        element={
+          <RequireAuth>
+            <OnboardingWizard />
           </RequireAuth>
         }
       />

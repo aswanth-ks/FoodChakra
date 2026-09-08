@@ -1,0 +1,233 @@
+/* Restaurant onboarding wizard, steps 1-3. */
+
+.wizard {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wizard__step {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(193, 200, 193, 0.6);
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-card);
+}
+
+.wizard__marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.wizard__marker--sm {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+
+.wizard__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wizard__tag {
+  color: var(--on-surface-variant);
+}
+
+.wizard__step--done {
+  background: var(--surface-container-low);
+}
+
+.wizard__step--done .wizard__marker {
+  background: var(--success);
+  color: #ffffff;
+}
+
+.wizard__step--active {
+  border-color: var(--primary);
+  background: var(--secondary-container);
+}
+
+.wizard__step--active .wizard__marker {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.wizard__step--active .wizard__tag {
+  color: var(--primary);
+}
+
+.wizard__arrow {
+  position: absolute;
+  right: -11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: var(--outline-variant);
+  z-index: 1;
+}
+
+/* ----------------------------------------------------------------- form */
+
+.formgrid {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.formgrid__wide {
+  grid-column: 1 / -1;
+}
+
+.formgrid .field {
+  margin-top: 0;
+}
+
+.req {
+  color: var(--error);
+}
+
+.select {
+  height: 44px;
+  padding: 0 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(193, 200, 193, 0.8);
+  background: var(--surface-container-lowest);
+  font: inherit;
+  color: var(--on-surface);
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+/* -------------------------------------------------------------- step 2 */
+
+.stagingbanner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  flex-wrap: wrap;
+}
+
+.simbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+
+.rolecard {
+  margin: 16px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--primary);
+  background: var(--secondary-container);
+}
+
+.rolecard__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.caps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.caps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* -------------------------------------------------------------- step 3 */
+
+.successhero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 24px;
+  background: var(--primary);
+  color: var(--on-primary);
+  border-color: var(--primary);
+}
+
+.successhero__mark {
+  font-size: 44px;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------- actions */
+
+.wizardbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(193, 200, 193, 0.6);
+  background: var(--surface-container-lowest);
+  box-shadow: var(--shadow-card);
+}
+
+.wizardbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+@media (max-width: 1200px) {
+  .wizard {
+    grid-template-columns: 1fr;
+  }
+
+  .wizard__arrow {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .formgrid {
+    grid-template-columns: 1fr;
+  }
+
+  .successhero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
