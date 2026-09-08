@@ -34,7 +34,12 @@ const MAIN_NAV: NavEntry[] = [
 ];
 
 const MANAGEMENT_NAV: NavEntry[] = [
-  { label: 'Restaurants', icon: 'storefront', path: '/restaurants/onboard' },
+  { label: 'Restaurants', icon: 'storefront', path: '/restaurants' },
+  {
+    label: 'Onboard Restaurant',
+    icon: 'add_business',
+    path: '/restaurants/onboard',
+  },
   { label: 'Rescuers', icon: 'sports_motorsports' },
   { label: 'Locations', icon: 'distance' },
   { label: 'Activity', icon: 'history' },

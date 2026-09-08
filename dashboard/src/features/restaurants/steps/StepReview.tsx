@@ -26,6 +26,7 @@ export default function StepReview({
   onEditDetails,
   onEditAccess,
   onOnboardAnother,
+  onViewAll,
   onResend,
   resendNotice,
 }: {
@@ -36,6 +37,7 @@ export default function StepReview({
   onEditDetails: () => void;
   onEditAccess: () => void;
   onOnboardAnother: () => void;
+  onViewAll: () => void;
   onResend: () => void;
   resendNotice: string | null;
 }) {
@@ -109,7 +111,7 @@ export default function StepReview({
         </section>
 
         <div className="wizardbar">
-          {/* The restaurant profile and directory pages are not built yet. */}
+          {/* The per-partner profile page is not built yet; the directory is. */}
           <button
             className="btn btn--quiet"
             type="button"
@@ -122,8 +124,7 @@ export default function StepReview({
             <button
               className="btn btn--quiet"
               type="button"
-              disabled
-              title="Restaurants directory — not built yet"
+              onClick={onViewAll}
             >
               View All Restaurants (248 Active Nodes)
             </button>
@@ -188,7 +189,7 @@ export default function StepReview({
         </section>
 
         <div className="wizardbar">
-          <button className="btn btn--quiet" type="button" onClick={onOnboardAnother}>
+          <button className="btn btn--quiet" type="button" onClick={onViewAll}>
             Cancel Provisioning
           </button>
           <button className="btn btn--primary" type="button" onClick={onEditAccess}>

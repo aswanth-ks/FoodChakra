@@ -9,6 +9,7 @@ import RescueQueuePage from './features/rescues/RescueQueuePage';
 import EscalationPage from './features/rescues/EscalationPage';
 import AnalyticsPage from './features/analytics/AnalyticsPage';
 import OnboardingWizard from './features/restaurants/OnboardingWizard';
+import RestaurantsPage from './features/restaurants/RestaurantsPage';
 import HealthPage from './features/health/HealthPage';
 
 /**
@@ -77,6 +78,14 @@ export default function App() {
         element={
           <RequireAuth>
             <AnalyticsPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/restaurants"
+        element={
+          <RequireAuth>
+            <RestaurantsPage />
           </RequireAuth>
         }
       />

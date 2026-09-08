@@ -80,7 +80,7 @@ export default function OnboardingWizard({
       <nav className="crumbs t-body-sm" aria-label="Breadcrumb">
         <span className="muted">Management</span>
         <span aria-hidden="true">/</span>
-        <Link to="/overview">Restaurants</Link>
+        <Link to="/restaurants">Restaurants</Link>
         <span aria-hidden="true">/</span>
         <span className="muted">Onboard Restaurant</span>
       </nav>
@@ -128,7 +128,7 @@ export default function OnboardingWizard({
         <StepDetails
           draft={draft}
           onChange={patch}
-          onCancel={() => navigate('/overview')}
+          onCancel={() => navigate('/restaurants')}
           onNext={() => go(2)}
         />
       )}
@@ -160,6 +160,7 @@ export default function OnboardingWizard({
             setGrantState(simulateConflict ? 'conflict' : 'granted')
           }
           onOnboardAnother={reset}
+          onViewAll={() => navigate('/restaurants')}
           onResend={() =>
             setResendNotice(
               'No email was re-sent — dispatching activation tokens needs the ' +

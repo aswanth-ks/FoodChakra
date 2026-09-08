@@ -148,7 +148,7 @@ onto Flutter's `ColorScheme`.
 | Smart Escalation | Mobile DS | `04f4eb21239a4f9fa5a3c4108afcf70f` | Built (`/escalations`) |
 | Rescue Queue | Mobile DS | `5f3fede2b5f74d57834db003fcfc2d66` | Built (`/rescue-queue`) |
 | Analytics | Mobile DS | `425247d520024816b1f7cc5891946928` | Built (`/analytics`) |
-| Restaurants | Mobile DS | `0db51c916c3441faa27126cf53fa3b05` | Not built |
+| Restaurants | Mobile DS | `0db51c916c3441faa27126cf53fa3b05` | Built (`/restaurants`) |
 | Restaurant Onboarding: Step 1 | Mobile DS | `7ef47ae53bc945adb7a1444678d3d754` | Built (`/restaurants/onboard/1`) |
 | Restaurant Onboarding: Step 2 | Mobile DS | `ab93f88ddd2c4670aad9771485e0803d` | Built (`/restaurants/onboard/2`) |
 | Restaurant Onboarding: Step 3 | Mobile DS | `0af8dfeeed2c44ecb8fd00e28a0f9f08` | Built (`/restaurants/onboard/3`) |
