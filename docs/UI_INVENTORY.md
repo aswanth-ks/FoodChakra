@@ -98,7 +98,7 @@ onto Flutter's `ColorScheme`.
 | Consumer Explore Food | `03d1ce15100b42a2bddce7b60f3274df` | `/explore` | Built (`ExploreScreen`, UI only) |
 | Consumer Food Details | `87586e9ef13d4197977c3d229a7a4b91` | `/food/:id` | Built (`FoodDetailsScreen`, UI only) |
 | Consumer Rescue Confirmation Sheet | `a1032738300c4089ab43b5b3a57ed769` | sheet | Built (`showRescueConfirmationSheet`, UI only) |
-| Consumer Live Rescue Matching | `0483482c28fe4d19932a48305d8d054f` | `/rescue/matching` | Not built |
+| Consumer Live Rescue Matching | `0483482c28fe4d19932a48305d8d054f` | `/give/matching` | Built |
 | Consumer Rescuer Found | `e722e6e8aa6c4460b93d55a5310a6f28` | `/rescue/:id/found` | Built (`RescuerFoundScreen`, UI only) |
 | Consumer Active Rescue | `8a01e8c064ff4d16ad96343f5ad4d6c4` | `/rescue/:id` | Built (`ActiveRescueScreen`, maps hand-off live) |
 | Consumer Rescue Complete | `41bd3493561546c4af16f9bf8ccdc75e` | `/rescue/:id/complete` | Built (`RescueCompleteScreen`, UI only) |
@@ -107,10 +107,10 @@ onto Flutter's `ColorScheme`.
 
 | Screen | Screen ID | Route | Status |
 |---|---|---|---|
-| Give Surplus Food Entry | `d61ab0dfa7f8490186c40344bb801985` | `/give` | Not built |
-| Surplus Food Details | `c8299f4a379940debf632c160a3602b9` | `/give/details` | Not built |
-| Availability & Pickup | `3d47cf51ed654c5aac6fc3c7c884b342` | `/give/pickup` | Not built |
-| Review & Publish | `807b6f65ad7c4528a68c2ca235f4ff36` | `/give/review` | Not built |
+| Give Surplus Food Entry | `d61ab0dfa7f8490186c40344bb801985` | `/give` | Built (`GiveEntryScreen`, UI only) |
+| Surplus Food Details | `c8299f4a379940debf632c160a3602b9` | `/give/details` | Built (`SurplusDetailsScreen`, UI only) |
+| Availability & Pickup | `3d47cf51ed654c5aac6fc3c7c884b342` | `/give/pickup` | Built (`AvailabilityPickupScreen`, UI only) |
+| Review & Publish | `807b6f65ad7c4528a68c2ca235f4ff36` | `/give/review` | Built (`ReviewPublishScreen`, UI only) |
 
 ### Consumer — account
 
@@ -124,9 +124,9 @@ onto Flutter's `ColorScheme`.
 
 | Screen | Screen ID | Route | Status |
 |---|---|---|---|
-| Partner Home | `a28e2ad4001447d19e06b3f8c70a2f02` | `/partner` | Not built |
+| Partner Home | `a28e2ad4001447d19e06b3f8c70a2f02` | `/partner` | Built |
 | Partner Activity | `2a41a236575f4c2dbeeef7511838b8df` | `/partner/activity` | Not built |
-| Surplus Management | `1dfcc1f17d784472998243e653639be0` | `/partner/surplus` | Not built |
+| Surplus Management | `1dfcc1f17d784472998243e653639be0` | `/partner/surplus` | Built |
 | Add Surplus Quick Start | `80897a01b04f4bb1af9e55365653c106` | `/partner/surplus/new` | Not built |
 | Partner Availability & Pickup | `8c4434f7d9124080ac592412e0aaabc4` | `/partner/surplus/pickup` | Not built |
 | Partner Review & Publish | `64bf9da70a2a4d42bad4bb8f850f0836` | `/partner/surplus/review` | Not built |
@@ -143,8 +143,9 @@ onto Flutter's `ColorScheme`.
 | Overview | Mobile DS | `90a39f15d47f43faa930c9b0995e51d8` | Not built |
 | Live Rescue Map | Mobile DS | `a09ee9419df34806981f38b776c5b172` | Not built |
 | Rescue Opportunity Detail | Mobile DS | `804145037efc453ab479efffe0867c56` | Not built |
-| Overview | Ops Console | `6d0e54157764439abe027aefe7303a8d` | Not built |
+| Overview | Ops Console | `6d0e54157764439abe027aefe7303a8d` | Built (`/overview`) |
 | Operations Mark | Ops Console | `e5db80818371418ca387fb9eae8c31e9` | asset |
+| Console Sign In | *(no design — built from console tokens)* | — | Built (`/login`) |
 
 ### Image assets (not screens)
 
@@ -179,6 +180,7 @@ the palette its designs share (`AuthColors`, `RescueColors`).
 | `RescueCard` / `LivePill` / `LiveDot` / `RescueChip` / `SectionHeader` / `IconTile` / `DetailRow` / `RescuePrimaryButton` / `RescueMiniButton` / `RescueIconButton` | `rescue_widgets.dart` | Home, Food Details, Confirmation Sheet, Active Rescue |
 | `ListingCard` | `features/home/presentation/home_screen.dart` | Home's nearby opportunity row |
 | `ExploreListingCard` | `rescue/presentation/explore_screen.dart` | Explore's result row — a distinct composition (92px photo, distance chip, ruled footer), not a variant of `ListingCard` |
+| `GiveStepAppBar` / `GiveFieldLabel` / `GiveBadge` / `GiveTextField` / `GiveChoiceChip` / `GiveInfoPanel` / `GiveActionBar` | `give/presentation/widgets/give_widgets.dart` | The four give steps. Reuses `RescueColors` and `rescueFont` — the give designs share the same brand scale |
 | `NearbyMap` / `RouteMap` | `rescue/presentation/widgets/stylised_map.dart` | The designs' stylised SVG maps, as `CustomPainter`s. **Phase 8 replaces both with a real map.** |
 
 ### Identified in the designs — still to build

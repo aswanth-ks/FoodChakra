@@ -123,8 +123,7 @@ class LiveDot extends StatefulWidget {
   State<LiveDot> createState() => _LiveDotState();
 }
 
-class _LiveDotState extends State<LiveDot>
-    with SingleTickerProviderStateMixin {
+class _LiveDotState extends State<LiveDot> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 2000),
@@ -263,6 +262,7 @@ class SectionHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.live = false,
+    this.badgeCount,
     this.actionLabel,
     this.onAction,
   });
@@ -271,6 +271,10 @@ class SectionHeader extends StatelessWidget {
 
   /// Appends the small pulsing "live stream active" dot after the title.
   final bool live;
+
+  /// Sage counter pill after the title, e.g. the partner dashboard's "2"
+  /// beside "Active surplus".
+  final int? badgeCount;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -293,6 +297,22 @@ class SectionHeader extends StatelessWidget {
             if (live) ...[
               const SizedBox(width: 8),
               const LiveDot(size: 8, color: RescueColors.live),
+            ],
+            if (badgeCount != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                width: 20,
+                height: 20,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: RescueColors.sage,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$badgeCount',
+                  style: rescueFont(11, 700, color: RescueColors.primary),
+                ),
+              ),
             ],
           ],
         ),

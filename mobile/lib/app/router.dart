@@ -2,13 +2,23 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/domain/account_role.dart';
 import '../features/auth/presentation/create_account_screen.dart';
 import '../features/auth/presentation/email_verification_screen.dart';
 import '../features/auth/presentation/forgot_password_screen.dart';
 import '../features/auth/presentation/sign_in_screen.dart';
+import '../features/give/domain/surplus_draft.dart';
+import '../features/give/presentation/availability_pickup_screen.dart';
+import '../features/give/presentation/give_entry_screen.dart';
+import '../features/give/presentation/live_matching_screen.dart';
+import '../features/give/presentation/review_publish_screen.dart';
+import '../features/give/presentation/surplus_details_screen.dart';
 import '../features/health/presentation/health_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/onboarding/presentation/impact_screen.dart';
+import '../features/partner/data/sample_partner.dart';
+import '../features/partner/presentation/partner_home_screen.dart';
+import '../features/partner/presentation/partner_surplus_screen.dart';
 import '../features/onboarding/presentation/location_setup_screen.dart';
 import '../features/onboarding/presentation/share_surplus_screen.dart';
 import '../features/onboarding/presentation/welcome_screen.dart';
@@ -25,6 +35,7 @@ import '../features/rescue/presentation/widgets/rescue_confirmation_sheet.dart';
 import '../features/splash/presentation/splash_screen.dart';
 import '../features/rescue/domain/activity_item.dart';
 import '../shared/widgets/consumer_nav_bar.dart';
+import '../shared/widgets/partner_nav_bar.dart';
 
 /// Named route paths. Screens navigate with these constants, never string
 /// literals, so a path change is a one-line edit.
@@ -57,6 +68,15 @@ class AppRoutes {
   /// Distinct from [impact], which is the onboarding screen.
   static const String myImpact = '/impact';
   static const String profile = '/profile';
+
+  // Give surplus, a four-step flow. The draft travels in the route's `extra`.
+  static const String give = '/give';
+  static const String giveDetails = '/give/details';
+  static const String givePickup = '/give/pickup';
+  static const String giveReview = '/give/review';
+
+  /// Where a published surplus lands while it waits for a rescuer.
+  static const String giveMatching = '/give/matching';
   static const String foodDetails = '/food/:id';
   static const String activeRescue = '/rescue/:id';
   static const String rescuerFound = '/rescue/:id/found';
@@ -67,6 +87,14 @@ class AppRoutes {
   static String rescuerFoundFor(String id) => '/rescue/$id/found';
   static String rescueCompleteFor(String id) => '/rescue/$id/complete';
 
+  // Restaurant partner. Reached by signing in with a partner account, never
+  // by signing up — access is granted from the ops console.
+  static const String partnerHome = '/partner';
+  static const String partnerSurplus = '/partner/surplus';
+  static const String partnerActivity = '/partner/activity';
+  static const String partnerImpact = '/partner/impact';
+  static const String partnerProfile = '/partner/profile';
+
   // Phase 5-7 role home routes
   static const String donorHome = '/donor';
   static const String receiverHome = '/receiver';
@@ -75,6 +103,28 @@ class AppRoutes {
 
 /// The `:id` path parameter shared by the food and rescue routes.
 String listingId(GoRouterState state) => state.pathParameters['id'] ?? '';
+
+/// Reads the surplus draft a give step was pushed with, falling back to an
+/// empty draft when the route is opened directly (a deep link, or `--route`).
+SurplusDraft giveDraft(GoRouterState state) => state.extra is SurplusDraft
+    ? state.extra! as SurplusDraft
+    : const SurplusDraft();
+
+/// Where an account lands after authenticating.
+///
+/// One sign-in screen serves both apps; the account's role picks the home.
+String homeForRole(AccountRole role) =>
+    role.isPartner ? AppRoutes.partnerHome : AppRoutes.home;
+
+/// Partner bottom-nav routing. Only Home has a screen so far; the other four
+/// tabs stay inert until theirs are built.
+void onPartnerTab(BuildContext context, PartnerTab tab) => switch (tab) {
+  PartnerTab.home => context.go(AppRoutes.partnerHome),
+  PartnerTab.surplus => context.go(AppRoutes.partnerSurplus),
+  PartnerTab.activity => null,
+  PartnerTab.impact => null,
+  PartnerTab.profile => null,
+};
 
 /// Bottom-nav routing. Only Home and Explore have screens so far; the other
 /// three tabs stay inert until theirs are built.
@@ -164,7 +214,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           // The code is not checked against anything yet; entering six digits
           // lands on Home so the consumer flow is reachable. Phase 3 replaces
           // this with a real verification call.
-          onVerify: (_) => context.go(AppRoutes.home),
+          onVerify: (_) => context.go(
+            homeForRole(roleForEmail(state.uri.queryParameters['email'] ?? '')),
+          ),
           // onResend stays null until the Phase 3 auth service exists.
         ),
       ),
@@ -178,6 +230,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           onRescueFood: () => context.go(AppRoutes.explore),
           onExploreNearby: () => context.go(AppRoutes.explore),
           onSeeAll: () => context.go(AppRoutes.explore),
+          onGiveFood: () => context.push(AppRoutes.give),
           onViewImpact: () => context.push(AppRoutes.myImpact),
           onSelectTab: (tab) => onConsumerTab(context, tab),
           // Give food, the notification bell and the Activity / Impact /
@@ -216,6 +269,63 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
+        path: AppRoutes.give,
+        name: 'give',
+        builder: (context, state) => GiveEntryScreen(
+          draft: giveDraft(state),
+          onBack: () => context.canPop() ? context.pop() : null,
+          onContinue: (draft) =>
+              context.push(AppRoutes.giveDetails, extra: draft),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.giveDetails,
+        name: 'giveDetails',
+        builder: (context, state) => SurplusDetailsScreen(
+          draft: giveDraft(state),
+          onBack: () => context.canPop() ? context.pop() : null,
+          onContinue: (draft) =>
+              context.push(AppRoutes.givePickup, extra: draft),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.givePickup,
+        name: 'givePickup',
+        builder: (context, state) => AvailabilityPickupScreen(
+          draft: giveDraft(state),
+          onBack: () => context.canPop() ? context.pop() : null,
+          onContinue: (draft) =>
+              context.push(AppRoutes.giveReview, extra: draft),
+          // Choosing a different pickup point needs the Phase 8 map.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.giveReview,
+        name: 'giveReview',
+        builder: (context, state) => ReviewPublishScreen(
+          draft: giveDraft(state),
+          onBack: () => context.canPop() ? context.pop() : null,
+          // Edit walks back up the stack to the step that owns the field.
+          onEditFood: () => context.pop(),
+          onEditPickup: () => context.pop(),
+          // A published post goes straight to its live matching screen. The
+          // form steps are dropped from the stack so Back leaves the flow.
+          onPublished: (draft) =>
+              context.go(AppRoutes.giveMatching, extra: draft),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.giveMatching,
+        name: 'giveMatching',
+        builder: (context, state) => LiveMatchingScreen(
+          draft: giveDraft(state),
+          onBack: () =>
+              context.canPop() ? context.pop() : context.go(AppRoutes.home),
+          // Help and Manage post need the Phase 5 support and listings
+          // services, so they stay inert.
+        ),
+      ),
+      GoRoute(
         path: AppRoutes.profile,
         name: 'profile',
         builder: (context, state) => ProfileScreen(
@@ -245,13 +355,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'activity',
         builder: (context, state) => ActivityScreen(
           onSelectTab: (tab) => onConsumerTab(context, tab),
-          // A rescue in flight opens Active Rescue. A share still being
-          // matched needs the Live Rescue Matching screen, which is not built
-          // yet, so it stays inert.
-          onOpenActivity: (item) {
-            if (item.kind == ActivityKind.rescue) {
-              context.push(AppRoutes.activeRescueFor(item.id));
-            }
+          // A rescue in flight opens Active Rescue; the user's own share
+          // opens its live matching screen. Until Phase 5 there is no stored
+          // draft behind an activity entry, so the matching screen falls back
+          // to its defaults.
+          onOpenActivity: (item) => switch (item.kind) {
+            ActivityKind.rescue => context.push(
+              AppRoutes.activeRescueFor(item.id),
+            ),
+            ActivityKind.share => context.push(AppRoutes.giveMatching),
           },
           // Filter needs Phase 5 query support.
         ),
@@ -298,13 +410,45 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: AppRoutes.partnerHome,
+        name: 'partnerHome',
+        builder: (context, state) => PartnerHomeScreen(
+          dashboard: SamplePartner.dashboard,
+          onSelectTab: (tab) => onPartnerTab(context, tab),
+          // Both shortcuts and "View all" open the Surplus screen, which is
+          // where every batch lives.
+          onViewAllSurplus: () => context.go(AppRoutes.partnerSurplus),
+          onRescueHistory: () => context.go(AppRoutes.partnerSurplus),
+          // Add surplus, the pickup alert, the surplus cards, notifications
+          // and Activity need partner screens that do not exist yet, so they
+          // stay inert rather than pointing at placeholders.
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.partnerSurplus,
+        name: 'partnerSurplus',
+        builder: (context, state) => PartnerSurplusScreen(
+          dashboard: SamplePartner.dashboard,
+          onBack: () => context.canPop()
+              ? context.pop()
+              : context.go(AppRoutes.partnerHome),
+          onSelectTab: (tab) => onPartnerTab(context, tab),
+          // Add surplus, Manage and each card's action need the rest of the
+          // partner set, so they stay inert.
+        ),
+      ),
+      GoRoute(
         path: AppRoutes.login,
         name: 'login',
         builder: (context, state) => SignInScreen(
           onBack: () => context.canPop() ? context.pop() : null,
           onForgotPassword: () => context.push(AppRoutes.forgotPassword),
           onCreateAccount: () => context.push(AppRoutes.createAccount),
-          // onSignIn stays null until the auth service exists (Phase 3).
+          // Nothing is authenticated yet: the password is not checked, and
+          // the email's domain stands in for the partner grant the ops
+          // console issues. Phase 3 replaces this with the role claim on the
+          // authenticated session — see `roleForEmail`.
+          onSignIn: (email, _) => context.go(homeForRole(roleForEmail(email))),
         ),
       ),
       GoRoute(
