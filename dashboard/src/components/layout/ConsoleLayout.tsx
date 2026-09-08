@@ -293,11 +293,13 @@ export function ConsoleStatusStrip({
   activeRescues,
   needIntervention,
   pickupsApproaching,
+  expandedCoverage,
   version,
 }: {
   activeRescues: number;
   needIntervention: number;
   pickupsApproaching?: number;
+  expandedCoverage?: number;
   version: string;
 }) {
   return (
@@ -310,6 +312,14 @@ export function ConsoleStatusStrip({
         <span className="statusstrip__sep" aria-hidden="true" />
         <span className="statusstrip__item">{activeRescues} active rescues</span>
         <span className="statusstrip__sep" aria-hidden="true" />
+        {expandedCoverage !== undefined && (
+          <>
+            <span className="statusstrip__item">
+              {expandedCoverage} expanded coverage
+            </span>
+            <span className="statusstrip__sep" aria-hidden="true" />
+          </>
+        )}
         <span className="statusstrip__item" style={{ color: 'var(--error)' }}>
           {needIntervention} require intervention
         </span>

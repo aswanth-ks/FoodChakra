@@ -4,6 +4,7 @@ import LoginPage from './features/auth/LoginPage';
 import OverviewPage from './features/overview/OverviewPage';
 import LiveRescueMapPage from './features/rescues/LiveRescueMapPage';
 import RescueDetailPage from './features/rescues/RescueDetailPage';
+import CoveragePage from './features/rescues/CoveragePage';
 import HealthPage from './features/health/HealthPage';
 
 /**
@@ -39,6 +40,14 @@ export default function App() {
         element={
           <RequireAuth>
             <RescueDetailPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/live-rescues/:id/coverage"
+        element={
+          <RequireAuth>
+            <CoveragePage />
           </RequireAuth>
         }
       />

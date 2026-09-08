@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ConsoleLayout, {
   ConsoleStatusStrip,
 } from '../../components/layout/ConsoleLayout';
@@ -37,7 +37,12 @@ export default function RescueDetailPage({
   status?: NetworkStatus;
 }) {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Both "Intervene" and the "Expand rescue coverage" action open the
+  // coverage screen, which is where a widening decision is actually made.
+  const coveragePath = `/live-rescues/${id ?? detail.reference}/coverage`;
 
   // The map's "Intervene" deep-links straight into the drawer.
   const [drawerOpen, setDrawerOpen] = useState(
@@ -118,7 +123,7 @@ export default function RescueDetailPage({
           <button
             className="btn btn--danger"
             type="button"
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => navigate(coveragePath)}
           >
             <span className="icon" style={{ fontSize: 15 }} aria-hidden="true">
               bolt
@@ -381,17 +386,25 @@ export default function RescueDetailPage({
             </div>
 
             <div className="actionlist">
-              {detail.actions.map((action) => (
+              {detail.actions.map((action) => {
+                // Expanding coverage has a screen of its own; the rest act on
+                // the rescue service directly, which does not exist yet.
+                const expands = action.icon === 'cell_tower';
+
+                return (
                 <button
                   key={action.label}
                   type="button"
                   className={`actionrow${
                     action.destructive ? ' actionrow--danger' : ''
                   }`}
-                  // Each of these acts on the rescue service, which does not
-                  // exist yet. Intervene is the one live path, via the drawer.
-                  disabled
-                  title="Needs the Phase 14 rescue service"
+                  disabled={!expands}
+                  onClick={expands ? () => navigate(coveragePath) : undefined}
+                  title={
+                    expands
+                      ? 'Open dynamic rescue coverage'
+                      : 'Needs the Phase 14 rescue service'
+                  }
                 >
                   <span className="icon" style={{ fontSize: 18 }} aria-hidden="true">
                     {action.icon}
@@ -406,7 +419,8 @@ export default function RescueDetailPage({
                     chevron_right
                   </span>
                 </button>
-              ))}
+                );
+              })}
             </div>
           </article>
         </div>
