@@ -1,0 +1,227 @@
+/*
+ * Design tokens for the FoodLoop Operations Console.
+ *
+ * Lifted from the Stitch design's Tailwind theme
+ * (project `8883198284374486482`) so the console has one palette rather than
+ * per-component colour literals. The console uses a Material-style scheme,
+ * which is deliberately different from the mobile app's warmer brand surface:
+ * this is a dense operations tool, not a consumer app.
+ */
+
+:root {
+  /* Brand */
+  --primary: #002213;
+  --primary-container: #133826;
+  --on-primary: #ffffff;
+  --primary-fixed: #c3ecd1;
+  --primary-fixed-dim: #a8d0b6;
+  --on-primary-fixed: #002112;
+  --on-primary-fixed-variant: #2a4e3a;
+
+  /* Surfaces, lightest to dimmest */
+  --surface: #f8f9ff;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eff4ff;
+  --surface-container: #e5eeff;
+  --surface-container-high: #dce9ff;
+  --surface-container-highest: #d3e4fe;
+  --surface-dim: #cbdbf5;
+
+  /* Text */
+  --on-surface: #0b1c30;
+  --on-surface-variant: #414843;
+
+  /* Lines */
+  --outline: #727973;
+  --outline-variant: #c1c8c1;
+
+  --secondary: #58605c;
+  --secondary-container: #dae2dc;
+  --secondary-fixed-dim: #c0c8c3;
+
+  /* Status: green is healthy, amber is a closing window, red needs a human */
+  --success: #2baf54;
+  --success-bright: #62df7d;
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+  --error-container: #ffdad6;
+  --on-error-container: #93000a;
+  --warning: #d97706;
+  --warning-deep: #b45309;
+  --warning-bg: #fffbeb;
+  --warning-border: #fde68a;
+
+  /* Map layers */
+  --map-base: #f4f7f5;
+  --map-grid: #e2e8e4;
+  --map-water: #d8e5df;
+  --map-district: #cad5ce;
+  --map-road: #dee5e1;
+  --map-lane: #ffffff;
+  --map-route-green: #16a34a;
+  --map-route-amber: #d97706;
+  --map-node-idle: #94a3b8;
+  --map-watermark: #93a29b;
+
+  --sidebar-width: 250px;
+  --topbar-height: 56px;
+
+  --radius: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --shadow-card: 0 1px 2px rgba(13, 40, 26, 0.04);
+  --shadow-raised: 0 4px 16px rgba(11, 28, 48, 0.08);
+
+  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  /* Inter carries the numerals: it has proper tabular figures, which keep
+     live-updating metrics from jittering. */
+  --font-label: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Material Symbols, as used throughout the design. */
+.icon {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga';
+  user-select: none;
+}
+
+/* Type scale from the design. */
+.t-headline-xl {
+  font-family: var(--font-label);
+  font-size: 32px;
+  line-height: 40px;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+.t-headline-lg {
+  font-size: 24px;
+  line-height: 32px;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+.t-headline-sm {
+  font-size: 18px;
+  line-height: 24px;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
+.t-body-lg {
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: -0.01em;
+}
+
+.t-body-md {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.t-body-sm {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.t-label-md {
+  font-family: var(--font-label);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.t-label-sm {
+  font-family: var(--font-label);
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+/* Metrics are tabular so a changing digit does not shift the layout. */
+.t-metric {
+  font-family: var(--font-label);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--on-surface-variant);
+}
+
+.upper {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Visible focus everywhere: this is a keyboard-driven ops tool. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

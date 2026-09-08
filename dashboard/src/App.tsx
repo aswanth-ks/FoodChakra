@@ -1,50 +1,31 @@
-import { useQuery } from '@tanstack/react-query';
-import { API_URL } from './lib/api/client';
-import { fetchHealth } from './lib/api/health';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import RequireAuth from './features/auth/RequireAuth';
+import LoginPage from './features/auth/LoginPage';
+import OverviewPage from './features/overview/OverviewPage';
+import HealthPage from './features/health/HealthPage';
 
 /**
- * Phase 0 connectivity proof for the Operations Dashboard.
- * Replaced by the real ops shell in Phase 14.
+ * Operations Console routes.
+ *
+ * Only Overview is built. The other console destinations appear in the
+ * sidebar as disabled rows rather than routes to empty pages, so the nav
+ * shows the shape of the console without pretending those screens exist.
  */
 export default function App() {
-  const { data, isPending, error, refetch } = useQuery({
-    queryKey: ['health'],
-    queryFn: fetchHealth,
-    retry: false,
-  });
-
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 32, maxWidth: 640 }}>
-      <h1 style={{ marginBottom: 4 }}>FoodLoop — Operations Dashboard</h1>
-      <p style={{ color: '#5c625c', marginTop: 0 }}>Phase 0 · backend connectivity check</p>
-
-      {isPending && <p>Contacting the backend…</p>}
-
-      {error && (
-        <div style={{ border: '1px solid #f5c2c2', background: '#fdf2f2', padding: 16, borderRadius: 12 }}>
-          <strong>Something went wrong</strong>
-          <p style={{ margin: '8px 0 12px' }}>{(error as Error).message}</p>
-          <button onClick={() => void refetch()}>Try again</button>
-        </div>
-      )}
-
-      {data && (
-        <dl style={{ border: '1px solid #e0e4e0', padding: 16, borderRadius: 12, background: '#fff' }}>
-          <Row label="Status" value={data.status} />
-          <Row label="Environment" value={data.environment} />
-          <Row label="MongoDB" value={data.database.connected ? (data.database.version ?? 'connected') : 'not connected'} />
-          <Row label="Endpoint" value={API_URL} />
-        </dl>
-      )}
-    </main>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', gap: 12, padding: '4px 0' }}>
-      <dt style={{ width: 120, color: '#5c625c' }}>{label}</dt>
-      <dd style={{ margin: 0, fontWeight: 500 }}>{value}</dd>
-    </div>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/overview"
+        element={
+          <RequireAuth>
+            <OverviewPage />
+          </RequireAuth>
+        }
+      />
+      {/* Phase 0 backend connectivity check, kept reachable for diagnostics. */}
+      <Route path="/health" element={<HealthPage />} />
+      <Route path="*" element={<Navigate to="/overview" replace />} />
+    </Routes>
   );
 }
