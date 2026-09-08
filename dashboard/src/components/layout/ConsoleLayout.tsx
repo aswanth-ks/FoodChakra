@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { clearSession, readSession } from '../../features/auth/session';
 
 /** One sidebar destination. */
@@ -15,7 +15,12 @@ interface NavEntry {
 
 const MAIN_NAV: NavEntry[] = [
   { label: 'Overview', icon: 'grid_view', path: '/overview' },
-  { label: 'Live Rescues', icon: 'local_shipping', count: 42 },
+  {
+    label: 'Live Rescues',
+    icon: 'local_shipping',
+    path: '/live-rescues',
+    count: 42,
+  },
   { label: 'Rescue Queue', icon: 'inbox' },
   { label: 'Escalations', icon: 'warning', count: 3, alert: true },
   { label: 'Zero-Waste Network', icon: 'hub' },
@@ -32,20 +37,24 @@ const MANAGEMENT_NAV: NavEntry[] = [
 /**
  * The console frame: fixed sidebar, fixed topbar, scrolling content.
  *
- * Only Overview is built, so every other destination renders as a disabled
- * row rather than a link to nothing. They keep their counts because those
- * come from the same fixtures the Overview page uses.
+ * Overview and Live Rescues are built; every other destination renders as a
+ * disabled row rather than a link to nothing. They keep their counts because
+ * those come from the same fixtures the built pages use.
  */
 export default function ConsoleLayout({
   title,
   subtitle,
   children,
+  statusStrip,
 }: {
   title: string;
   subtitle: string;
   children: ReactNode;
+  /** The fixed bottom status strip, on the pages whose designs have one. */
+  statusStrip?: ReactNode;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const session = readSession();
 
   function handleSignOut() {
@@ -74,7 +83,7 @@ export default function ConsoleLayout({
         </div>
 
         <div className="sidebar__nav">
-          <NavGroup label="Main" entries={MAIN_NAV} />
+          <NavGroup label="Main" entries={MAIN_NAV} pathname={location.pathname} />
           <div
             style={{
               height: 1,
@@ -82,7 +91,11 @@ export default function ConsoleLayout({
               margin: '0 8px',
             }}
           />
-          <NavGroup label="Management" entries={MANAGEMENT_NAV} />
+          <NavGroup
+            label="Management"
+            entries={MANAGEMENT_NAV}
+            pathname={location.pathname}
+          />
         </div>
 
         <div className="sidebar__foot">
@@ -192,53 +205,137 @@ export default function ConsoleLayout({
           </div>
         </header>
 
-        <main className="shell__main">
+        <main className={`shell__main${statusStrip ? ' shell__main--strip' : ''}`}>
           <div className="shell__inner">{children}</div>
         </main>
+
+        {statusStrip}
       </div>
     </div>
   );
 }
 
-function NavGroup({ label, entries }: { label: string; entries: NavEntry[] }) {
+function NavGroup({
+  label,
+  entries,
+  pathname,
+}: {
+  label: string;
+  entries: NavEntry[];
+  pathname: string;
+}) {
   return (
     <div className="navgroup">
       <span className="navgroup__label t-label-sm upper">{label}</span>
       <nav>
         {entries.map((entry) => {
-          const built = entry.path !== undefined;
-          return (
-            <div
-              key={entry.label}
-              className={[
-                'navitem',
-                built ? 'navitem--active' : 'navitem--disabled',
-              ].join(' ')}
-              aria-current={built ? 'page' : undefined}
-              aria-disabled={built ? undefined : true}
-              title={built ? undefined : `${entry.label} — not built yet`}
-            >
+          const count =
+            entry.count === undefined ? null : (
+              <span
+                className={[
+                  'navitem__count',
+                  't-label-sm',
+                  entry.alert ? 'navitem__count--alert' : '',
+                ].join(' ')}
+              >
+                {entry.count}
+              </span>
+            );
+
+          const body = (
+            <>
               <span className="navitem__main">
                 <span className="icon" style={{ fontSize: 18 }}>
                   {entry.icon}
                 </span>
                 <span className="t-body-sm truncate">{entry.label}</span>
               </span>
-              {entry.count !== undefined && (
-                <span
-                  className={[
-                    'navitem__count',
-                    't-label-sm',
-                    entry.alert ? 'navitem__count--alert' : '',
-                  ].join(' ')}
-                >
-                  {entry.count}
-                </span>
-              )}
-            </div>
+              {count}
+            </>
+          );
+
+          if (entry.path === undefined) {
+            return (
+              <div
+                key={entry.label}
+                className="navitem navitem--disabled"
+                aria-disabled="true"
+                title={`${entry.label} — not built yet`}
+              >
+                {body}
+              </div>
+            );
+          }
+
+          // The detail page lives under /live-rescues, so a prefix match keeps
+          // the parent destination highlighted while drilled in.
+          const active =
+            pathname === entry.path || pathname.startsWith(`${entry.path}/`);
+
+          return (
+            <Link
+              key={entry.label}
+              to={entry.path}
+              className={`navitem${active ? ' navitem--active' : ''}`}
+              aria-current={active ? 'page' : undefined}
+            >
+              {body}
+            </Link>
           );
         })}
       </nav>
     </div>
+  );
+}
+
+/** The fixed strip along the bottom of the operational pages. */
+export function ConsoleStatusStrip({
+  activeRescues,
+  needIntervention,
+  pickupsApproaching,
+  version,
+}: {
+  activeRescues: number;
+  needIntervention: number;
+  pickupsApproaching?: number;
+  version: string;
+}) {
+  return (
+    <footer className="statusstrip t-label-sm">
+      <div className="statusstrip__group">
+        <span className="statusstrip__item">
+          <span className="dot dot--pulse" style={{ background: 'var(--success)' }} />
+          Network operational
+        </span>
+        <span className="statusstrip__sep" aria-hidden="true" />
+        <span className="statusstrip__item">{activeRescues} active rescues</span>
+        <span className="statusstrip__sep" aria-hidden="true" />
+        <span className="statusstrip__item" style={{ color: 'var(--error)' }}>
+          {needIntervention} require intervention
+        </span>
+        {pickupsApproaching !== undefined && (
+          <>
+            <span className="statusstrip__sep" aria-hidden="true" />
+            <span
+              className="statusstrip__item"
+              style={{ color: 'var(--warning-deep)' }}
+            >
+              {pickupsApproaching} pickups approaching
+            </span>
+          </>
+        )}
+      </div>
+
+      <div className="statusstrip__group muted">
+        <span>{version}</span>
+        <span className="statusstrip__sep" aria-hidden="true" />
+        <span className="statusstrip__item">
+          <span className="icon" style={{ fontSize: 13 }} aria-hidden="true">
+            lock
+          </span>
+          Secure TLS Connected
+        </span>
+      </div>
+    </footer>
   );
 }

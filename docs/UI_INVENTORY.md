@@ -141,8 +141,8 @@ onto Flutter's `ColorScheme`.
 | Screen | Project | Screen ID | Status |
 |---|---|---|---|
 | Overview | Mobile DS | `90a39f15d47f43faa930c9b0995e51d8` | Not built |
-| Live Rescue Map | Mobile DS | `a09ee9419df34806981f38b776c5b172` | Not built |
-| Rescue Opportunity Detail | Mobile DS | `804145037efc453ab479efffe0867c56` | Not built |
+| Live Rescue Map | Mobile DS | `a09ee9419df34806981f38b776c5b172` | Built (`/live-rescues`) |
+| Rescue Opportunity Detail | Mobile DS | `804145037efc453ab479efffe0867c56` | Built (`/live-rescues/:id`) |
 | Overview | Ops Console | `6d0e54157764439abe027aefe7303a8d` | Built (`/overview`) |
 | Operations Mark | Ops Console | `e5db80818371418ca387fb9eae8c31e9` | asset |
 | Console Sign In | *(no design — built from console tokens)* | — | Built (`/login`) |
