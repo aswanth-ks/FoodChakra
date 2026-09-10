@@ -2,8 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/token_storage.dart';
 import '../config/env.dart';
+import 'auth_interceptor.dart';
 import 'error_interceptor.dart';
+import 'redacting_log_interceptor.dart';
 
 /// The single HTTP client for the whole app.
 ///
@@ -22,20 +25,20 @@ final dioProvider = Provider<Dio>((ref) {
     ),
   );
 
+  // Order matters: the auth interceptor must see a raw 401 before the error
+  // interceptor converts it into a Failure and rejects the chain.
+  final auth = AuthInterceptor(ref.watch(tokenStorageProvider))..attach(dio);
+  dio.interceptors.add(auth);
   dio.interceptors.add(ErrorInterceptor());
 
   if (Env.enableNetworkLogs && kDebugMode) {
+    // Not Dio's `LogInterceptor`: with `requestBody`/`responseBody` on it
+    // writes passwords, one-time codes, handover codes and both tokens
+    // straight into the device log. This one redacts them.
     dio.interceptors.add(
-      LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        logPrint: (Object o) => debugPrint(o.toString()),
-      ),
+      RedactingLogInterceptor(log: debugPrint),
     );
   }
-
-  // Phase 3 adds an AuthInterceptor here to attach the bearer token and
-  // transparently refresh it on 401.
 
   return dio;
 });

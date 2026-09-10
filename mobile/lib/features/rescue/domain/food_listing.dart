@@ -41,6 +41,9 @@ class FoodListing {
     this.availableFromLabel,
     this.isLive = false,
     this.timeRemaining,
+    this.status,
+    this.quantityCount,
+    this.unit,
     this.preparedNote = 'Prepared today',
     this.sharedByVerified = true,
     this.travelEstimate,
@@ -98,6 +101,25 @@ class FoodListing {
 
   /// Time left in the pickup window. Only set for [ListingUrgency.expiring].
   final Duration? timeRemaining;
+
+  /// The server's canonical lifecycle value (`published`, `matched`, …).
+  ///
+  /// Null for a listing that did not come from the API. The client never
+  /// derives it — it decides only what to show, never what state something is
+  /// in.
+  final String? status;
+
+  /// The counted amount and its unit — named `quantityCount` because
+  /// [quantity] is already the display label the cards render.
+  ///
+  /// The counted amount and its unit (`meal_boxes`, `servings`, `kilograms`),
+  /// as published. Impact totals are summed from these rather than parsed back
+  /// out of a display label.
+  final int? quantityCount;
+  final String? unit;
+
+  /// True once a rescuer has claimed this listing.
+  bool get isClaimed => status == 'matched';
 
   final String preparedNote;
 

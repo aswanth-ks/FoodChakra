@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isOpsEmail, sessionForEmail, writeSession } from './session';
+import { readPreferences } from '../settings/data/preferences';
 
 /**
  * Operations Console sign-in.
@@ -39,7 +40,8 @@ export default function LoginPage() {
 
     setSubmitting(true);
     writeSession(sessionForEmail(email));
-    navigate('/overview', { replace: true });
+    // The operator's chosen landing page, from console preferences.
+    navigate(readPreferences().landing, { replace: true });
   }
 
   return (

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/widgets/consumer_nav_bar.dart';
-import '../data/sample_impact.dart';
 import '../domain/impact_summary.dart';
 import 'widgets/rescue_widgets.dart';
 
@@ -13,13 +12,20 @@ import 'widgets/rescue_widgets.dart';
 /// Reachable two ways — the Impact nav tab, and "View impact" on Home — so the
 /// header's back arrow is rendered only when there is something to pop.
 ///
-/// UI only. The figures come in as parameters and default to the design's
-/// fixtures; Phase 5 computes them from the rescue history.
+/// The figures come in as parameters, computed from the rescue history by
+/// `consumerImpactProvider`. The defaults are an honest zero rather than the
+/// design's sample numbers, so a screen wired up wrongly shows nothing rather
+/// than someone else's impact.
 class MyImpactScreen extends StatefulWidget {
   const MyImpactScreen({
     super.key,
-    this.summary = SampleImpact.summary,
-    this.recent = SampleImpact.recent,
+    this.summary = const ImpactSummary(
+      mealBoxes: 0,
+      rescues: 0,
+      servings: 0,
+      shares: 0,
+    ),
+    this.recent = const [],
     this.onBack,
     this.onAboutMethodology,
     this.onViewAll,
@@ -28,6 +34,16 @@ class MyImpactScreen extends StatefulWidget {
 
   final ImpactSummary summary;
   final List<ImpactEntry> recent;
+
+  /// The time-range chips.
+  ///
+  /// The design offers 7 days / 30 days / 12 months / All time, but impact is
+  /// computed over the whole history: a rescue carries no completion date in
+  /// the client model yet, so the shorter ranges cannot be honoured. Rather
+  /// than show three chips that silently return all-time figures, only the
+  /// range that is real is offered. Restoring the others needs completion
+  /// timestamps on the rescue DTO.
+  static const List<String> ranges = ['All time'];
 
   /// Null when the screen is the nav-tab root, which has nothing to pop.
   final VoidCallback? onBack;
@@ -55,7 +71,7 @@ class _MyImpactScreenState extends State<MyImpactScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
-            for (final range in SampleImpact.ranges)
+            for (final range in MyImpactScreen.ranges)
               ListTile(
                 title: Text(
                   range,

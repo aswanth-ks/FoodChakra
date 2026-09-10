@@ -8,6 +8,10 @@ enum ActivityStatus {
 
   /// The user's own surplus is still being matched to a rescuer.
   lookingForRescuer,
+
+  /// Someone has claimed the user's own surplus and is on their way, so the
+  /// owner needs to confirm the handover when they arrive.
+  rescuerArriving,
 }
 
 /// One in-flight entry on the Activity screen's "Active" tab.
@@ -62,6 +66,7 @@ class ActivityItem {
   String get statusLabel => switch (status) {
     ActivityStatus.readyForPickup => 'READY FOR PICKUP',
     ActivityStatus.lookingForRescuer => 'LOOKING FOR A RESCUER',
+    ActivityStatus.rescuerArriving => 'RESCUER ON THE WAY',
   };
 
   /// "42 min remaining", or null when nothing is counting down.
@@ -76,6 +81,7 @@ class ActivityItem {
   String get actionLabel => switch (status) {
     ActivityStatus.readyForPickup => 'View rescue',
     ActivityStatus.lookingForRescuer => 'Matching status',
+    ActivityStatus.rescuerArriving => 'Confirm handover',
   };
 }
 

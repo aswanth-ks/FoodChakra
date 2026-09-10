@@ -36,6 +36,36 @@ class ForbiddenFailure extends Failure {
   ]);
 }
 
+/// 403 with `EMAIL_NOT_VERIFIED` — the password was right, but the address
+/// has never been confirmed.
+///
+/// A subclass of [ForbiddenFailure] so anything that already treats a 403 as
+/// "this session is over" keeps working, while the sign-in screen can pick it
+/// out and open the verification screen instead of showing a refusal.
+class EmailNotVerifiedFailure extends ForbiddenFailure {
+  const EmailNotVerifiedFailure([
+    super.message = 'Verify your email address to sign in.',
+  ]);
+}
+
+/// 429 — a code was guessed too often, or asked for again too soon.
+class TooManyAttemptsFailure extends Failure {
+  const TooManyAttemptsFailure([
+    super.message = 'Too many attempts. Please try again in a moment.',
+  ]);
+}
+
+/// 503 — a dependency the backend needs is down.
+///
+/// Distinct from [ServerFailure] because it is the honest answer when email
+/// cannot be delivered: nothing was sent, and the user needs to be told that
+/// rather than shown a success screen.
+class ServiceUnavailableFailure extends Failure {
+  const ServiceUnavailableFailure([
+    super.message = 'That service is unavailable right now.',
+  ]);
+}
+
 /// 404 — resource does not exist.
 class NotFoundFailure extends Failure {
   const NotFoundFailure([super.message = 'Not found.']);

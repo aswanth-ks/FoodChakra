@@ -152,9 +152,17 @@ onto Flutter's `ColorScheme`.
 | Restaurant Onboarding: Step 1 | Mobile DS | `7ef47ae53bc945adb7a1444678d3d754` | Built (`/restaurants/onboard/1`) |
 | Restaurant Onboarding: Step 2 | Mobile DS | `ab93f88ddd2c4670aad9771485e0803d` | Built (`/restaurants/onboard/2`) |
 | Restaurant Onboarding: Step 3 | Mobile DS | `0af8dfeeed2c44ecb8fd00e28a0f9f08` | Built (`/restaurants/onboard/3`) |
-| Zero-Waste Network — Fallback Opportunity | Mobile DS | `a75b3478a61043db95d66ff928a1c838` | Not built |
+| Zero-Waste Network — Fallback Opportunity | Mobile DS | `a75b3478a61043db95d66ff928a1c838` | Built (`/zero-waste/fallback/:id`) — **translated from the design** |
 | Operations Mark | Ops Console | `e5db80818371418ca387fb9eae8c31e9` | asset |
 | Console Sign In | *(no design — built from console tokens)* | — | Built (`/login`) |
+| Rescuers Management | *(no design — built from console tokens)* | — | Built (`/rescuers`) |
+| Locations Management | *(no design — built from console tokens)* | — | Built (`/locations`) |
+| Activity Log | *(no design — built from console tokens)* | — | Built (`/activity`) |
+| Console Settings | *(no design — built from console tokens)* | — | Built (`/settings`) |
+| Zero-Waste Network Overview | *(no design — built from console tokens)* | — | Built (`/zero-waste`) |
+| Zero-Waste Recovery Partners | *(no design — built from console tokens)* | — | Built (`/zero-waste/partners`) |
+| Zero-Waste Routing | *(no design — built from console tokens)* | — | Built (`/zero-waste/routing`) |
+| Zero-Waste Network — Recovery History | Mobile DS | `0cfa0a7d733d45f3b5142b0a442db1f8` | Built (`/zero-waste/history`) — **translated from the design** |
 
 ### Image assets (not screens)
 
@@ -215,3 +223,26 @@ the palette its designs share (`AuthColors`, `RescueColors`).
 3. If a component appears on multiple screens, build it once and list it above.
 4. Never hardcode a colour or spacing value; use the tokens in `lib/app/theme/`.
 5. Every screen passes `docs/PAGE_CHECKLIST.md` before it is called complete.
+
+### Console screens with Stitch designs not yet reconciled
+
+Listing the project's 67 screens turned up designs for pages that were built from console tokens
+before Stitch was reachable. Each of these should be reconciled against its mock:
+
+| Screen | Screen ID | Built as |
+|---|---|---|
+| Zero-Waste Network Console — Overview | `44105705c1274290a2a8355690ac0e17` | `/zero-waste` |
+| Zero-Waste Network Console — Recovery Partners | `314e263dbd514f8ea7921a6471495401` | `/zero-waste/partners` |
+| Zero-Waste Network Console — Routing | `7a701e2facd94eec8ee92428e88124d3` | `/zero-waste/routing` |
+| Rescue Operations Console — Rescuers Management | `2fd8e8fbfb7c497dbbeeb8278f467766` | `/rescuers` |
+| Rescue Operations Console — Locations Management | `33405d4a757747f0acf4e53cb80fa246` | `/locations` |
+| Rescue Operations Console — Locations | `de3c4a2669944aa68f75e6744fd04b0c` | `/locations` (second design) |
+| Rescue Operations Console — Activity Log | `11e5e919bf5b435a927cb99d70deb6e9` | `/activity` |
+
+Designed but not built at all:
+
+| Screen | Screen ID |
+|---|---|
+| Zero-Waste Network Console — Analytics | `7cbe22589dfc4a54865bcb52c737da45` |
+| Zero-Waste Network Console — Handover (Review) | `9509d615d69c4e11be3339d88d6b7627` |
+| Zero-Waste Network Console — Fallback Opportunity (second design) | `4489ee49f11b4cc58b2ba916c2b37086` |

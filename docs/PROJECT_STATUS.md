@@ -1,8 +1,9 @@
 # FoodLoop — Project Status
 
-**Last updated:** 2026-09-07 (Stitch MCP connected)
-**Current phase:** Phase 2 — Database Design (not started)
+**Last updated:** 2026-09-10 (Stage K — live Atlas integration verification)
+**Current phase:** Backend Stage H — Dynamic Rescue Radius / Smart Escalation (not started)
 **Phases complete:** 0 (Foundation), 1 (Architecture)
+**Backend stages complete:** A (Audit + design), B (Foundation), C (Authentication), D (Listings), E (Rescues), F (Handover verification), G (Walkable loop), G.1 (Travel transition), H (Mobile completion)
 
 ---
 
@@ -38,6 +39,379 @@ yet — this is deliberate, per the development contract.
 | Typed API client + error parsing | Done | `src/lib/api/client.ts` |
 | CORS verified for dashboard origin | Done | preflight returns the allow headers |
 
+### Backend Stage A — Frontend audit and backend design — **Complete**
+
+Full output in `docs/BACKEND_CONTRACT.md`. The audit read the implemented Flutter app and ops
+console rather than working from the original assumptions, and changed the plan:
+
+- The product has **consumer** and **partner** accounts, not donor/receiver/volunteer. A
+  consumer both rescues and shares; a partner is a business granted access from the console.
+- `food_requests`, `matches`, `volunteers` and `organizations` were **dropped** — no screen
+  submits a request that someone approves, so the flow is search-and-claim, not negotiation.
+  Thirteen proposed collections became ten.
+- The console's nine-step lifecycle is canonical; the mobile and partner enums are projections.
+
+### Backend Stage B — Backend and MongoDB foundation — **Complete**
+
+| Item | Status | Evidence |
+|---|---|---|
+| Canonical lifecycle, single source of truth | Done | `app/shared/lifecycle.py`, 20 tests |
+| Ten collection names, closed set | Done | `app/db/collections.py` |
+| Index bootstrap, all 10 collections (31 indexes) | Done | `app/db/indexes.py`, 15 tests |
+| Rescue claim partial unique index | Done | `uniq_active_rescue_per_listing` |
+| Geospatial `2dsphere` indexes (6) | Done | listings, partners, users, rescues, recovery_partners, zones |
+| Activity event foundation (append-only) | Done | `app/features/activity/`, 6 tests |
+| Optional `GOOGLE_MAPS_API_KEY` setting | Done | `app/core/config.py`, `.env.example` |
+| Startup does not stall on a DB outage | Done | boots in 5.5s, `/health` reports `degraded` |
+
+Not started, deliberately: authentication, listings, rescues, matching, escalation, fallback,
+ops APIs. Stage B is foundation only.
+
+### Backend Stage C — Authentication and authorization — **Complete**
+
+| Item | Status | Evidence |
+|---|---|---|
+| bcrypt password hashing (cost 12) | Done | `app/core/security.py` |
+| JWT access (30 min) + refresh (30 day) | Done | typed, separated by a `type` claim |
+| Refresh rotation, single-use, replay revokes all | Done | atomic `$pull` in the repository |
+| Consumer registration (role not client-settable) | Done | `extra="forbid"` → 422 on escalation |
+| Login with status enforcement | Done | suspended/disabled refused |
+| `GET /auth/me` | Done | the client's only role source |
+| Guards: consumer / partner / staff | Done | `app/features/auth/dependencies.py` |
+| Ops access as a capability, not a role | Done | `staff` field + `require_staff` |
+| `roleForEmail()` removed from the auth path | Done | deleted; router reads the session |
+| Flutter auth layer on the real API | Done | `features/auth/{domain,data,presentation}` |
+| Backend tests | Done | **112 passed** |
+| Mobile tests | Done | **56 passed**, `flutter analyze` clean |
+
+No new collection was added; no index changed. `users.uniq_email` already covered lookup and
+uniqueness. Refresh sessions are embedded on the user document.
+
+Not started, deliberately: listings, rescues, matching, escalation, fallback, ops APIs.
+Email verification and password reset are **designed but unimplemented** — they need an email
+provider that is not configured; see `docs/API.md`.
+
+### Backend Stage D — Listings — **Complete**
+
+The Give and Explore flows now run against the real API instead of fixtures.
+
+| Item | Status | Evidence |
+|---|---|---|
+| `POST /listings` — publish surplus | Done | opens at `published` from `lifecycle.py` |
+| `GET /listings/nearby` — Explore | Done | `$nearSphere` on `geo_pickup_location` |
+| `GET /listings/mine` — Activity / partner Surplus | Done | `by_owner_created` |
+| `GET /listings/{id}` — Food Details | Done | explicit allowlist projection |
+| `POST /listings/{id}/cancel` — withdraw | Done | legality from `LISTING_TRANSITIONS` |
+| Activity events | Done | `listing_created`, `listing_cancelled` |
+| Ownership / lifecycle / timestamps server-assigned | Done | `extra="forbid"` → 422 |
+| `urgency` derived per read, never stored | Done | asserted in tests |
+| Stage E claim readiness | Done | shared `claimable_filter()` + guarded `set_status` |
+| Flutter: Explore, Details, Give publish on the API | Done | fixtures now unused by those screens |
+| Backend tests | Done | **179 passed** |
+| Mobile tests | Done | **62 passed**, `flutter analyze` clean |
+
+**No new collections and no index changes.** `geo_pickup_location`, `by_status_expires_at` and
+`by_owner_created` already covered every query. Still ten collections.
+
+Deliberately not built: `PATCH /listings` (nothing in the app edits a published listing), draft
+endpoints (no UI creates a draft), photo upload (no upload surface yet).
+
+Not started: rescues, matching, escalation, fallback, notifications, ops APIs.
+
+### Backend Stage E — Rescue / tap-to-claim — **Complete**
+
+| Item | Status | Evidence |
+|---|---|---|
+| `POST /rescues` — atomic tap-to-claim | Done | one `find_one_and_update` on the listing |
+| `GET /rescues/mine`, `GET /rescues/{id}` | Done | 404 for another account's rescue |
+| `POST /rescues/{id}/on-the-way` | Done | `matched -> onTheWay` |
+| `POST /rescues/{id}/cancel` | Done | listing returns to the pool as `searching` |
+| Consumer-only claiming | Done | partner receives 403 |
+| Compensating release on a failed insert | Done | guarded on `active_rescue_id` |
+| Activity events | Done | `rescue_created`, `rescue_cancelled`, `rescue_ontheway` |
+| Concurrency proven | Done | 2-way and 10-way races: exactly one winner |
+| Flutter: claim, Rescuer Found, Active Rescue, cancel | Done | fixtures gone from those routes |
+| Backend tests | Done | **228 passed** |
+| Mobile tests | Done | **66 passed**, `flutter analyze` clean |
+
+**No new collections, no index changes.** `uniq_active_rescue_per_listing` is unchanged and
+still partial. Still ten collections, 31 indexes.
+
+**Collection is not implemented, deliberately.** The canonical lifecycle routes `collected`
+through `verified`, and no handover verification workflow exists in the product — the app's own
+code calls its "I have collected this food" button a stand-in. Faking verification or removing
+the rule were both rejected; see `docs/API.md`.
+
+### Backend Stage F — Handover verification & completion — **Complete**
+
+The core loop now closes: **Share → Discover → Rescue → On the way → Arrived → Verified →
+Collected → Completed.**
+
+| Item | Status | Evidence |
+|---|---|---|
+| `POST /rescues/{id}/arrived` — issues the code | Done | rescuer only |
+| `POST /rescues/{id}/verify` — owner confirms | Done | rescuer refused unconditionally |
+| `POST /rescues/{id}/collected` — completes | Done | `verified -> collected -> completed` |
+| Code generated with `secrets`, stored hashed | Done | `app/core/security.py` |
+| 30-min expiry, 5-attempt cap, single use | Done | atomic `$inc` on attempts |
+| Replay-proof under concurrency | Done | 2 simultaneous verifies -> 1 success, 1 event |
+| `arrived -> collected` guard preserved | Done | asserted still false |
+| Verifier authority from existing fields | Done | `owner_user_id`, `users.partner_id` |
+| Activity events | Done | six, one per transition; owner recorded on verify |
+| Backend tests | Done | **271 passed** |
+| Mobile tests | Done | **68 passed**, `flutter analyze` clean |
+
+**No new collections, no index changes.** Still ten collections, 31 indexes. New rescue fields:
+`handover_code_hash`, `handover_code_expires_at`, `handover_attempts`, `verified_at`,
+`verified_by`, `collected_at`, `completed_at`.
+
+**Two UI pieces remain before the loop is walkable in the app** — see the Stage F report:
+the rescuer's arrival + code display, and the owner's confirmation entry. The backend contract
+for both is complete and documented in `docs/API.md`.
+
+### Stage K — Live Atlas integration verification — **Complete**
+
+Everything before this stage was proven against fakes. This one re-proved it against the real
+cluster, and the difference matters: a conditional update that is conditional in a Python
+dictionary tells you nothing about whether MongoDB applies the same filter.
+
+**`backend/scripts/live_atlas_smoke_test.py`** — 136 checks, all passing. Development-only and
+deliberately outside `pytest`, which must keep running for someone with no Atlas credentials.
+
+| Proven live | How |
+|---|---|
+| Registration → verification → login → refresh → logout → reset | real services, real documents, codes captured from the email body and never printed |
+| Listing creation, detail, `$nearSphere`, food-type filter | real 2dsphere query; GeoJSON asserted longitude-first |
+| **Concurrent claim** | two real `claim()` calls in flight at once — **exactly one succeeded**, the other got 409 |
+| **`uniq_active_rescue_per_listing`** | a raw second active insert refused with E11000; two *terminal* rescues coexist, so history never blocks a future claim |
+| Full lifecycle `matched → onTheWay → arrived → verified → collected → completed` | every state read back from Atlas after each step |
+| Invalid transitions | `matched → collected`, repeated `onTheWay`, `completed → onTheWay` all refused, with Atlas unchanged |
+| Handover | code returned once to the rescuer, only a bcrypt hash stored, attempts `$inc` atomically, rescuer cannot verify their own, consumed code cannot be replayed |
+| Activity events | all seven actions written; the repository has no update or delete method at all |
+| Authorization | a stranger cannot cancel another's listing; an owner cannot rescue their own; `GET /rescues/{id}` stays scoped to the rescuer (404, not 403 — a rescue id is not public); the owner discovers the rescue via `for-listing` and is never shown the code |
+| **The whole golden path over real HTTP** | uvicorn on a real port, two accounts, claim → travel → arrive → verify → collect |
+| **Restart persistence** | uvicorn killed and restarted as a separate OS process; the account and listing read back intact |
+
+**Cleanup is by `_id` of documents this run inserted** — never by query — and runs in a
+`finally`, so a crashed run still tidies up. Verified afterwards: every FoodLoop collection is
+back to zero documents.
+
+**Collections with no code behind them.** Six of the ten — `partners`, `escalations`,
+`fallback_cases`, `recovery_partners`, `zones`, `notifications` — have schemas and indexes but
+**no service writes to them**. Not "implemented but unexercised": not yet implemented. Nothing
+in this stage pretended otherwise.
+
+#### The defect this stage found
+
+Mobile was logging credentials. `dio_client.dart` installed Dio's `LogInterceptor` with
+`requestBody: true, responseBody: true`, which prints every body and header verbatim. On these
+endpoints that meant the device log held the user's **password** (`/auth/login`), their
+**one-time code** (`/auth/verify-email`, `/auth/reset-password`), the **handover code**
+(`/rescues/{id}/verify`), the `Authorization` header, and both tokens from the login response.
+
+Debug-only is not a defence on its own: an Android debug log is readable over adb, and a
+developer reading a bug report should not be handed someone's password either.
+
+Replaced with `RedactingLogInterceptor`, which keeps what logging is for — method, path,
+status, payload shape — and replaces any credential-bearing value with `***`, at any nesting
+depth. It fails closed on `code`, redacting the error envelope's `UNAUTHORIZED` along with
+one-time codes; the envelope's `message` and the HTTP status still identify the failure. Nine
+regression tests.
+
+**No backend defect was found.** Every other finding during this stage was a wrong assumption
+in the check script — the stored GeoJSON key, the real activity action names, the `lat`/`lng`
+query parameter names — corrected in the script, not in the application.
+
+Mobile **170 passed** (was 161), backend **338 passed**, `ruff` and `flutter analyze` clean,
+plus **136 live checks** against Atlas.
+
+### Stage J — Email verification, password reset, login email — **Complete**
+
+Mobile authentication is finished. The three inert pieces are real: verification delivers a
+code, reset changes a password, and a sign-in sends a confirmation.
+
+**Email lives in one module.** `app/core/email.py` owns everything about sending mail, the way
+`security.py` owns everything about cryptography. `AuthService` never sees SMTP — it calls
+`send_verification_otp`, `send_password_reset_otp` and `send_login_notification`, which say
+*what* is being sent. Swapping SMTP for a hosted API later touches no authentication code.
+
+`smtplib` is synchronous, so each send runs in a worker thread under a hard timeout. No new
+dependency was added.
+
+**SMTP configuration is backend-only** — seven `SMTP_*` settings in `backend/.env`, which is
+git-ignored. Nothing SMTP-related appears in Flutter, in any client response, or in
+`.env.example` beyond placeholders. When `SMTP_HOST` is blank the API answers **503** on the
+endpoints that need mail; it never reports a code as sent when nothing left the process.
+
+**Registration no longer issues tokens.** The account is created unverified and a code is
+emailed; the client goes to the verification screen, then to sign-in. Handing over a session at
+sign-up would have made verification optional in practice whatever the login rule said.
+
+**Login now requires a verified address**, refused with a distinct `EMAIL_NOT_VERIFIED` code so
+the app can open the verification screen rather than showing "wrong password". Checked only
+after the password is proven, so an unauthenticated caller still learns nothing.
+
+**One-time codes** — `secrets`, six digits, bcrypt-hashed, ten-minute expiry, five attempts
+then destroyed, single use enforced by a conditional update, superseded by any newer code, and
+a sixty-second resend cooldown. A code is never returned, never logged, never stored in the
+clear.
+
+**Forgot-password answers identically to everything** — registered, unknown, suspended, inside
+its cooldown, or SMTP down. The cooldown is enforced by *not sending*, never by a 429, because
+a 429 for a known address beside a 200 for an unknown one is the leak in a different shape.
+
+**A password reset revokes every session** in the same conditional write that changes the
+password. Three separate calls could be interrupted between, and a reset that left a
+thirty-day session alive would be worse than no reset at all.
+
+**The login email claims nothing it cannot know** — no device, no IP, no city. The backend
+collects none of them, and "signed in from Chennai" would train people to ignore the one signal
+that should alarm them. It is sent as a background task and never awaited.
+
+| Endpoint | Added |
+|---|---|
+| `POST /auth/verify-email` | Stage J |
+| `POST /auth/verify-email/resend` | Stage J |
+| `POST /auth/forgot-password` | Stage J |
+| `POST /auth/reset-password` | Stage J |
+
+Two subdocuments were added to `users` (`email_verification`, `password_reset`) — no new
+collections, no new indexes. See `docs/DATABASE.md`.
+
+**One screen had to be built.** The Stitch set stops at "Forgot Password" and has no
+enter-code-and-choose-a-password step. `ResetPasswordScreen` is assembled entirely from the
+existing `auth_widgets.dart` pieces with the same header, spacing and footer as its sibling, so
+it reads as the next page of that flow rather than a new design. The forgot-password copy also
+changed from "reset link" to "reset code" — FoodLoop sends a code, and promising a link would
+send the user hunting for a button that is not in the email.
+
+**Real SMTP delivery was tested** and works: `python -m scripts.send_test_email` sent a live
+message through `smtp.gmail.com:587` and it arrived. That script sends the real login
+notification rather than a special test message, so a pass means the production path works.
+
+**Atlas became reachable during this stage**, so the flow was also checked against the real
+cluster: a probe account was registered through the real service, its stored document inspected
+(unverified, bcrypt code hash, no plaintext, attempts at zero), login refused with
+`EMAIL_NOT_VERIFIED`, a wrong password refused with the generic 401 instead, a wrong code
+counted as an attempt, and the account deleted afterwards. A real verification email was
+delivered as part of it. This is the first live database verification in the project — every
+earlier stage remains verified against fakes only.
+
+Backend **338 passed** (was 279), mobile **161 passed** (was 139), `ruff` and
+`flutter analyze` clean.
+
+### Stage I — Authentication session & navigation hardening — **Complete**
+
+The last two mobile defects are closed. No product feature was added, no screen redesigned,
+and the backend authentication model was not changed — `/auth/me` already answered everything
+the client needed.
+
+**One gate, in one place.** `_authRedirect` in `lib/app/router.dart` is now the only code that
+decides whether a screen may be shown. Screens do not check for a session, no API failure
+pushes `/login`, and nothing navigates imperatively out of an interceptor.
+
+It answers exactly one question — *does a session exist?* Role, account status, permissions and
+staff capability stay the backend's to enforce. The router reads the role only to pick *which*
+home a signed-in account lands on, and that role arrived on the session, never from the email.
+
+**Protection is an allow-list.** `kPublicRoutes` in `lib/app/session_gate.dart` names the
+routes reachable without a session; everything else is protected. A route added later is
+protected by default, which is the safe direction to fail.
+
+**Startup.** `AuthController.build()` already called `restoreSession()`; the router now reads it
+at launch so the restore starts immediately. `restoreSession()` calls `/auth/me` through the
+Stage H interceptor stack, so an expired access token is refreshed and replayed by the existing
+mechanism — no second refresh path was created. A 401 or 403 (the latter is what a suspended
+account gets) clears the tokens and resolves to "signed out". A *network* failure keeps the
+tokens: they may be perfectly good, and signing a user out because a train went into a tunnel
+would be wrong.
+
+**Splash.** It no longer picks a destination. It reports that its animation is finished, and
+the gate moves the app on once the restore has *also* settled — whichever lands second. The
+Stitch design, timeline and hold duration are untouched.
+
+**Logout** clears the stored tokens and the router does the rest, so no authenticated screen is
+left on the stack to pop back to.
+
+| Defect | Before | After |
+|---|---|---|
+| No route guard | `/home` typed by hand rendered Home, then error states | redirected to `/login` |
+| Splash ignored the session | every launch went through onboarding | a restored session goes straight to its home |
+| Logout only navigated | tokens survived sign-out | tokens cleared, gate redirects |
+
+Mobile **139 passed** (was 111), backend **279 passed**, `flutter analyze` and `ruff` clean.
+
+### Stage H — Mobile completion pass — **CORE COMPLETE**
+
+Every production screen now runs on the real backend. **All four fixture files were deleted**
+(`sample_listings`, `sample_activity`, `sample_impact`, `sample_partner`) — no production code
+path can reach fake data any more, and the screens' constructor defaults are empty rather than
+sample-backed, so a mis-wired route shows nothing instead of inventing food.
+
+| Screen | Source |
+|---|---|
+| Home | `/listings/nearby` + session name + completed-rescue count |
+| Explore | `/listings/nearby`, filters applied |
+| Food Details | `/listings/{id}` |
+| Give publish | `POST /listings` — the success state now waits on the server |
+| Activity (both tabs) | `/rescues/mine` + `/listings/mine` |
+| My Impact | computed from completed rescues and listings |
+| Rescue / handover / complete | `/rescues/*` |
+| Partner Home + Surplus | `/listings/mine` |
+
+**Two real defects were found and fixed:**
+
+1. **No bearer token was attached to any request.** Only `/auth/me` and `/auth/logout` set the
+   header by hand — every listings and rescues call went out anonymous and would have been
+   refused. `core/network/auth_interceptor.dart` now attaches it globally and refreshes once on
+   a 401, with rotation stored immediately (the server treats a reused refresh token as replay).
+2. **Give showed "Live" before calling the API.** The confirmation ran on a hardcoded delay, so
+   a rejected publish still looked like it worked. Success is now the server's answer.
+
+Also fixed: three pre-existing layout overflows (Active Rescue action row, two Explore rows) at
+390pt, invisible until these screens were first rendered in tests.
+
+Honest gaps, deliberately not faked: kilograms diverted shows "—" (no listing carries a weight),
+partner **profile** name/locality falls back to the account (no `/partners/me` endpoint), and the
+My Impact range chips are reduced to "All time" (rescues carry no completion date client-side).
+
+Mobile **111 passed**, backend **279 passed**, `flutter analyze` and `ruff` clean.
+
+### Stage G.1 — Travel transition — **Complete**
+
+`matched -> onTheWay` is now reachable in the app, closing the last gap in the golden path.
+
+The rescuer confirms departure explicitly with **"I'm on my way"**; opening the maps app
+mutates nothing, because looking at a route is not travelling. The backend endpoint already
+met every requirement (auth, rescuer ownership, canonical validation, guarded write, activity
+event) and needed no change beyond a docstring that described the old trigger.
+
+Backend **279 passed**, mobile **87 passed**, both linters clean.
+
+### Stage G — The walkable rescue loop — **Complete**
+
+The golden path is now executable by two real people in the app:
+
+**A shares → B discovers → B rescues → B travels → B taps "I've arrived" → FoodLoop shows B a
+one-time code → B reads it to A → A confirms → B collects → Rescue Complete.**
+
+| Item | Status | Evidence |
+|---|---|---|
+| Rescuer "I've arrived" + code display | Done | `_ArrivedButton`, `_HandoverCodeCard` |
+| Code held in memory only, never stored | Done | widget state; dropped on leaving |
+| Owner confirmation screen (6-digit entry) | Done | `HandoverConfirmationScreen` |
+| Works for **consumer**-owned listings | Done | reached from Activity |
+| Works for **partner**-owned listings | Done | reached from Partner Surplus |
+| Owner can discover the rescue | Done | `GET /rescues/for-listing/{id}` |
+| Collection calls the real endpoint | Done | no local success path remains |
+| Rescue Complete on real data | Done | fixtures removed from the rescue flow |
+| Activity + Partner Surplus on real data | Done | `activeActivityProvider`, `partnerDashboardProvider` |
+| Backend tests | Done | **276 passed** |
+| Mobile tests | Done | **82 passed**, `flutter analyze` clean |
+
+Only one backend addition, and it was necessary: `GET /rescues/for-listing/{id}`. Everything
+else in Stage F was reused unchanged, and `lifecycle.py` was not touched.
+
 ### Phase 1 — Architecture
 
 `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `README.md`, and ADR-0001 are written and agreed.
@@ -47,13 +421,16 @@ yet — this is deliberate, per the development contract.
 ## 3. Verification results
 
 ```text
-backend    pytest ................ 4 passed
+backend    pytest ................ 338 passed (Stage J)
 backend    ruff check ............ All checks passed
 backend    uvicorn boot .......... OK, /docs and /openapi.json served
+backend    MongoDB Atlas ......... REACHABLE — 10 collections, 31 indexes present
+backend    live smoke test ....... 136 checks passed against real Atlas + HTTP
+backend    real SMTP send ........ OK, delivered via smtp.gmail.com:587
 backend    error envelope ........ OK (404 -> {"error":{...}})
 backend    CORS preflight ........ OK (allow-origin: http://localhost:5173)
 mobile     flutter analyze ....... No issues found
-mobile     flutter test .......... 4 passed
+mobile     flutter test .......... 170 passed (Stage K)
 dashboard  npm run build ......... built in 295ms
 ```
 
@@ -71,9 +448,10 @@ running the code:
 
 | # | Blocker | Impact | Owner |
 |---|---|---|---|
-| B1 | **Cannot reach MongoDB Atlas — outbound port 27017 appears blocked on this network.** The Atlas URI is configured in `backend/.env` and is valid: the SRV record resolves to the real shard hosts (`ac-hpbwtyy-shard-00-0{0,1,2}.9qy2c0c.mongodb.net`). All three refuse TCP on 27017, while ports 80/443 connect fine and every non-standard high port tested (8080, 27017, 27018) is refused after a uniform ~2s. The failure is at TCP connect, **before authentication** — so the password is not the problem. | `/health` reports `degraded`. Phase 2 cannot be verified against a real cluster. | User — (a) add public IP `115.244.249.170` to Atlas Network Access, and (b) if it still fails, switch network (mobile hotspot) or run MongoDB locally via Docker. |
+| ~~B1~~ | ~~Cannot reach MongoDB Atlas — outbound port 27017 blocked.~~ **RESOLVED** — the cluster is reachable as of Stage J. `scripts/inspect_db.py` lists all 10 collections with their 31 indexes present, including `uniq_active_rescue_per_listing`, and a live probe exercised registration, the unverified-login refusal and a wrong-code attempt against the real database. Earlier stages were verified against fakes only; that is still true of them, and re-verifying the rescue loop live is worth doing. | — | Done |
 | ~~B2~~ | ~~Stitch designs not accessible.~~ **RESOLVED** — Stitch MCP connected at local scope; 46 mobile + 2 ops screens inventoried in `docs/UI_INVENTORY.md`. | — | Done |
 | B3 | **Exposed API key.** The Stitch key was pasted into chat twice and must be considered compromised. It is stored in `~/.claude.json` (outside the repo, not in git). | Security. | User — rotate it, then re-run `claude mcp add`. |
+| **B8** | **SMTP app password shared in chat.** The Gmail app password was pasted into the conversation, so it must be treated as compromised. It is in `backend/.env`, which is git-ignored and was never committed. | Security. | User — revoke it at Google Account → Security → App passwords once the demo is done, and issue a fresh one. |
 | B4 | **Android licenses not accepted; no emulator.** | App runs only in Chrome. Camera, GPS, and push cannot be validated. | User — `flutter doctor --android-licenses`, then create an AVD. Needed before Phase 5. |
 | B5 | **Visual Studio Build Tools incomplete.** | Windows desktop target broken. | Low priority — not a target platform. |
 | B6 | **Docker Desktop not running.** | Could not verify the live-DB `ok` path locally. | Optional — B1 resolves this instead. |
@@ -146,6 +524,142 @@ which are out of scope until instructed. `Sign in` on all three onboarding scree
 **Restaurant Partners directory built** at `/restaurants`, and the sidebar now separates the two concerns: **Restaurants** is the directory of existing partners, and **Onboard Restaurant** is its own entry pointing at the wizard. The directory carries the four totals, the search box, the status tabs and the location filter (all filtering live), the partner table, and the dossier drawer with its stats, operations health, recent activity and action panel. Selecting a row swaps the dossier; a rescue in the activity list opens the rescue detail page, and "View active rescues" reaches Live Rescues. The per-partner profile page and operational log are their own screens and are not built, so those two actions stay disabled. The directory's "Onboard Restaurant" button, the wizard's breadcrumb, its Cancel, and the post-grant "View All Restaurants" and "Cancel Provisioning" now all route between the two pages properly. Fixtures: `features/restaurants/data/samplePartners.ts` (**Phase 14 deletes that file**); the table shows 6 of 248 because the design does, and paging needs the API.
 
 **Restaurant onboarding (steps 1-3) built** at `/restaurants/onboard/:step`. This is the console side of the partner grant described above: onboarding a restaurant here is what would later let it sign in to the partner app, closing the loop with `roleForEmail` on the mobile side. **Nothing is provisioned.** No account is created, no email is dispatched, and the granted state is a local flag; the page says so in-page rather than implying a real provisioning run, and Phase 14 posts the draft to the backend, which is the only thing that can issue a grant or an activation token. The three steps share one route so the draft survives moving between them; a step is addressable but a hard reload restarts the wizard, since there is no server to hold a partial record. Step 1 gates Continue on the five required fields; step 2 validates the email format, runs the registry check copy off the entered domain, and carries the design's operator toggle for exercising the collision path; step 3 renders all three of the design's views — review, success and the 409 conflict — with the conflict reached the way it really would be, from a collision staged at step 2. **Design divergence:** step 3's mock carries a floating "State Preview Controls" pill bar for flipping between its three views; that is a presentation aid for the mock rather than an operator control, so it is omitted. **Security note:** the designs specify a zero-password architecture — desk operators never see, set, or handle partner passwords, and the partner sets their own credentials from the activation link. `OnboardingDraft` therefore has no password field and must never gain one; the capability list is presentational and Phase 14 must source the real scope from the backend's role definitions, so the console cannot claim a scope the server would not grant.
+**Rescuers, Locations and Activity built.** The three Management destinations are now real
+pages, so every sidebar entry works except Zero-Waste Network. **None of the three has a Stitch
+design** — the console designs never covered them — so, like Console Sign In, they are built
+from the console's own tokens and primitives rather than translated from a mock. Rescuers
+(`/rescuers`) and Locations (`/locations`) deliberately reuse the Restaurants directory shape
+(KPI row, filter bar, table, detail panel) instead of inventing a second layout language for
+the same job; Activity (`/activity`) uses the denser Rescue Queue shape, since a log is not a
+directory. Rescuers is the capacity side of the network — who is on shift, who is carrying a
+rescue, and how reliably each completes one; its verification, suspension and reinstatement
+controls are disabled, because each changes what a real person is allowed to do and only the
+backend can carry that decision and record who made it. Locations is the standing configuration
+behind Dynamic Rescue Coverage: that page asks whether to widen the band for one rescue now,
+this one asks what a zone's normal is and whether it is holding, so a zone that keeps expanding
+reads as a supply problem rather than a run of individual escalations; editing a radius and
+pausing or resuming a zone are disabled for the same reason. Activity is the audit trail, and
+it is **read-only by design** — there is deliberately no edit, no delete and no retention
+control on the page, only an export, which is disabled because a signed audit file has to be
+produced server-side. Its entries are fixtures and the page says so in-page rather than
+implying anything was really logged. **Role-model note:** Rescuers treats "rescuer" as a
+capability on an account, which holds whichever way blocker **B7** is decided; if B7 lands on a
+separate volunteer role, only the fixture source changes. Fixtures:
+`features/rescuers/data/sampleRescuers.ts`, `features/locations/data/sampleLocations.ts` and
+`features/activity/data/sampleActivity.ts` (**Phase 14 deletes all three**). One fix along the
+way: `.partnercell`, the avatar-plus-name table cell the Restaurants table already used, was
+never defined in CSS; it is now in `styles/tables.css` and both tables use it.
+
+**Settings built** at `/settings`, so the sidebar's footer row is now a real destination. The
+page is organised around one distinction, which is the point of its layout: **what this browser
+draws** versus **what the network does**. *Console preferences* are real and take effect
+immediately — landing page (honoured by the sign-in redirect) and table density (applied via
+`data-density` on the shell, tightening the dense tables only). They persist in `localStorage`
+per browser and are **not** attached to an account, because there is no account yet; the page
+says so rather than implying they sync, and `readPreferences()` validates every stored field,
+since a hand-edited `landing` would otherwise route the console to nothing. *Everything else* —
+dispatch and coverage defaults, the auto-expand threshold Smart Escalation acts on, alerting,
+access policy and audit retention — is disabled, and each row states the reason rather than
+showing a dead toggle: these apply to every operator, change what real people are dispatched to
+do, and have to be recorded in the audit trail. **Security note:** there is deliberately no
+password field, no MFA toggle and no API-token generator here. Console sign-in is still a local
+flag, and a credential UI in front of a stand-in would imply a protection that does not exist;
+the page carries that warning in-page. Phase 3 brings the real ops login and these controls with
+it. Preferences live in `features/settings/data/preferences.ts` — unlike the other console
+fixtures, **Phase 14 does not delete this file**; Phase 3 moves the values onto the ops profile.
+
+**Zero-Waste Network built** — four pages at `/zero-waste`, `/zero-waste/fallback/:id`,
+`/zero-waste/partners` and `/zero-waste/routing`. This was the last disabled sidebar entry, so
+**every console destination now has a route.** **The sidebar lists the section's pages directly**, as nested rows under the
+Zero-Waste Network entry, in operational order: **Overview, Fallback Opportunity, Recovery
+Partners, Routing** - see the tier, work the urgent case, then the standing configuration behind
+it. Fallback Opportunity is a `:id` detail view, so the sidebar entry points at
+`/zero-waste/fallback`, which redirects to whichever open case has the least time left - the same
+case the overview ranks first. That target comes from `mostUrgentCaseId()`, derived from the
+fixture rather than hard-coded, so the sidebar and the overview cannot disagree about which case
+is most urgent; Phase 14 resolves it from the API. (This replaced a first pass
+that hid them behind in-page pill tabs — the pages were reachable but not visible as
+destinations, which is not what a console sidebar is for.) `NavEntry` gained a `children` field
+and the row renderer became a recursive `NavRow`, so any future section can do the same. The matching
+rules that fell out of it each fix a real defect: a nested row whose path *is* the section root
+(the section's Overview) matches **exactly**, because prefix matching lit it on every page in the
+section; nested rows *below* the root still prefix-match, so Fallback Opportunity stays lit while
+viewing one case at `/zero-waste/fallback/:id`; a section header never takes the selected
+treatment itself, because its child already carries it and two highlights read as two selections;
+and top-level entries still prefix-match, so Live Rescues stays lit while drilled into
+`/live-rescues/:id`. The
+header keeps a distinct `navitem--section` treatment whenever any page beneath it is open, which
+is what marks the section on Fallback Opportunity.
+
+The tier is modelled on the **food-use hierarchy** — human consumption, animal feed, composting,
+energy recovery, landfill — and that ordering is load-bearing rather than decorative, because it
+is what waste regulation is written around. It is enforced in three places: the Overview
+hierarchy panel always renders best-to-worst and is not re-sortable; Fallback Opportunity ranks
+candidate partners by tier first and arrival time second, marks any candidate that would **drop a
+rung**, and warns that Phase 14 must require a recorded reason before accepting one; and Routing
+always renders its rules in priority order, since first-match-wins makes a rule's position as
+meaningful as its condition. Routing's preview table is the page's real payload — it answers
+"given these rules, where does each case in hand actually end up" — and flags the cases no rule
+can place, which are the ones that become landfill. Recovery Partners shows a used/ceiling
+capacity bar rather than a single number, because a partner at 95% is effectively unavailable for
+a large consignment while still reading as "accepting".
+
+Continuity with the rest of the console is deliberate: case `FB-3081` comes from rescue `FL-20470`,
+whose failed dispatch is the `EV-90390` entry in the Activity Log, and the zones match Locations.
+**Nothing dispatches** — assigning a case sends a real vehicle to a real address, so every action
+reports what it *would* do. **Fallback Opportunity is now a faithful translation of its Stitch
+design** (`a75b3478a61043db95d66ff928a1c838`). The Stitch MCP server is not exposed to the
+editor session, so it was driven directly over stdio with the project's own configured
+credentials to fetch the screen's HTML and screenshot. The page follows the mock section by
+section: the dark surplus banner with its countdown, the surplus inventory profile, the four
+recovery pathways, the recommendation analysis, the partner shortlist, the chain-of-custody
+routing strip, the operator decision panel, the fallback activity trail and the cancellation
+dialog. It is built as the decision it represents — choosing a **pathway** filters the
+**partners**, choosing a partner completes the **routing** strip, and the handoff stays
+unavailable until both are settled; a partner cannot outlive the pathway it was chosen on,
+because the selection resolves against the filtered list rather than being reset by an effect.
+`features/zerowaste/data/fallbackTypes.ts` and `sampleFallback.ts` carry the design's own
+vocabulary (recovery *pathways*, not tiers), and `styles/fallback.css` the pieces no earlier
+page had. **Three deliberate divergences:** the mock is drawn on the mobile brand surface and
+redraws its own sidebar, so this is re-based onto the console palette and `ConsoleLayout` as
+every Mobile-DS console screen has been; the mock names the origin rescue `FL-20481`, which in
+this console is the rescue Amara Okonkwo is currently carrying, so the origin is `FL-20470` —
+the dispatch that actually failed per Activity Log entry `EV-90390`; and the mock lists
+Animal-Feed Recovery *below* composting and biogas, which is not the food-use hierarchy order
+this module enforces, so the cards render in the design's order but selecting a pathway below
+the recommended tier raises the module's usual warning, and the ordering cannot quietly cost a
+rung. The overview's lead case was aligned to the design (Green Leaf Kitchen, 25 meal boxes,
+12 min) so clicking through shows the same surplus, and the superseded `FallbackDetail` types
+and fixture were deleted rather than left as dead code. Fixtures: `features/zerowaste/data/sampleZeroWaste.ts`
+(**Phase 14 deletes that file**); tier colours live apart from the components in
+`data/tierStyle.ts` so the component module exports components only, which is what Fast Refresh
+needs.
+
+**Recovery History built** at `/zero-waste/history`, translated from its Stitch design
+(`0cfa0a7d733d45f3b5142b0a442db1f8`) and placed after Routing in the sidebar, which is where the
+mock's own sidebar puts it. The page is the tier's record: title and quoted subtitle, the toolbar
+(search, All/Completed/Cancelled/Failed, Date, Newest sort), the seven-column table, and the
+Recovery Details panel with its Status Notes and View Partner action. Every toolbar control the
+design draws actually works - search, status, date bucket and sort direction all filter and order
+the table live, because a row of controls that only looked filterable would be the worst outcome
+on a page whose whole job is finding one past record. Records carry a `day` bucket and a sortable
+`at` timestamp so the Date and Sort controls have something real to act on. Like the Activity Log
+it is **read-only by design**: a completed recovery is evidence of what happened to real food, so
+there is no edit, no delete and no re-run, and the panel says corrections come from the backend
+that wrote the record. The three records the mock does not detail carry notes written to match
+their outcome, since a cancelled or failed record with no explanation is the one thing an operator
+opens this page to read. Fixtures: `features/zerowaste/data/sampleRecoveryHistory.ts`
+(**Phase 14 deletes that file**).
+
+**Design backlog discovered.** Listing the Stitch project's 67 screens showed that several pages
+built before Stitch was reachable **do have designs**: Zero-Waste Overview, Recovery Partners and
+Routing, plus Rescuers Management, Locations Management, a second Locations screen, and the
+Activity Log. Three more are designed and unbuilt: Zero-Waste Analytics, Zero-Waste Handover
+(Review), and a *second* Fallback Opportunity screen (`4489ee49...`, distinct from the
+`a75b3478...` one already translated). All are listed with their IDs at the end of
+`docs/UI_INVENTORY.md`. Those pages work and are internally consistent, but none of them has been
+checked against its mock.
+
 **Dashboard pages:** 0 of ~10.
 **Tests:** 8 total (4 backend, 4 widget).
 

@@ -120,6 +120,34 @@
   font-weight: 600;
 }
 
+/* A section whose pages are open, but which is not itself the current page -
+   e.g. sitting on /zero-waste/fallback/:id. Marks the group as current
+   without competing with the actually-selected child row. */
+.navitem--section {
+  color: var(--on-surface);
+  font-weight: 600;
+}
+
+/* Nested pages listed under a section entry. The rail replaces the parent's
+   left border so the group reads as one block. */
+.navnest {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 4px 18px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(193, 200, 193, 0.5);
+}
+
+.navitem--child {
+  padding: 5px 8px;
+  border-left: 2px solid transparent;
+}
+
+.navitem--child .navitem__main {
+  gap: 8px;
+}
+
 .navitem--disabled {
   opacity: 0.55;
   cursor: not-allowed;

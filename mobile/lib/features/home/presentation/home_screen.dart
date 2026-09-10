@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/widgets/consumer_nav_bar.dart';
-import '../../rescue/data/sample_listings.dart';
 import '../../rescue/domain/food_listing.dart';
 import '../../rescue/presentation/widgets/rescue_widgets.dart';
 import '../../rescue/presentation/widgets/stylised_map.dart';
@@ -21,9 +20,9 @@ class HomeScreen extends StatelessWidget {
     this.location = 'Karur, Tamil Nadu',
     this.opportunityCount = 12,
     this.nearestDistanceLabel = 'Nearest: 650m away',
-    this.listings = SampleListings.nearby,
-    this.mealsRescued = 24,
-    this.foodDivertedKg = 8.2,
+    this.listings = const [],
+    this.mealsRescued = 0,
+    this.foodDivertedKg,
     this.onChangeLocation,
     this.onNotifications,
     this.onExploreNearby,
@@ -41,7 +40,14 @@ class HomeScreen extends StatelessWidget {
   final String nearestDistanceLabel;
   final List<FoodListing> listings;
   final int mealsRescued;
-  final double foodDivertedKg;
+
+  /// Kilograms diverted, or null when it cannot be known.
+  ///
+  /// The Give flow never asks for a weight, so for almost every listing this
+  /// is genuinely unknown. It renders as "—" rather than a plausible-looking
+  /// number, because an invented sustainability statistic is worse than an
+  /// absent one.
+  final double? foodDivertedKg;
 
   final VoidCallback? onChangeLocation;
   final VoidCallback? onNotifications;
@@ -698,7 +704,7 @@ class _ImpactPreview extends StatelessWidget {
   });
 
   final int mealsRescued;
-  final double foodDivertedKg;
+  final double? foodDivertedKg;
   final VoidCallback? onViewImpact;
 
   @override
@@ -764,7 +770,7 @@ class _ImpactPreview extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _Metric(
-                  value: '$foodDivertedKg kg',
+                  value: foodDivertedKg == null ? '—' : '$foodDivertedKg kg',
                   label: 'food diverted',
                 ),
               ),

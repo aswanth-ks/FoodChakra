@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo.errors import PyMongoError
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -22,13 +21,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     await connect_to_mongo()
-    try:
-        if mongo.database is not None:
-            await ensure_indexes(mongo.database)
-    except PyMongoError as exc:
-        # Startup must not hard-fail on an unreachable database: /health has to
-        # stay reachable so the failure is observable rather than invisible.
-        logger.error("Index bootstrap skipped — MongoDB unreachable: %s", exc)
+    if mongo.database is not None:
+        logger.info("MongoDB connected to database: %s", mongo.database.name)
+        await ensure_indexes(mongo.database)
+        logger.info("MongoDB indexes initialized")
+    logger.info("Application ready")
     yield
     await close_mongo_connection()
 

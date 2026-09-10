@@ -66,6 +66,28 @@ class ForbiddenError(AppError):
     message = "You do not have permission to perform this action."
 
 
+class EmailNotVerifiedError(AppError):
+    """Credentials were correct, but the address has not been confirmed.
+
+    A distinct `code` rather than a plain 403 because the client has to act on
+    it: the mobile app sends the user to the verification screen instead of
+    showing "wrong password". It is only ever raised *after* the password has
+    been proven, so it tells an unauthenticated attacker nothing.
+    """
+
+    status_code = status.HTTP_403_FORBIDDEN
+    code = "EMAIL_NOT_VERIFIED"
+    message = "Verify your email address to sign in."
+
+
+class TooManyAttemptsError(AppError):
+    """A code was guessed too often, or a code email was asked for too soon."""
+
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "TOO_MANY_ATTEMPTS"
+    message = "Too many attempts. Please try again later."
+
+
 class ServiceUnavailableError(AppError):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     code = "SERVICE_UNAVAILABLE"

@@ -19,6 +19,7 @@ class ReviewPublishScreen extends StatefulWidget {
     this.onBack,
     this.onEditFood,
     this.onEditPickup,
+    this.onPublish,
     this.onPublished,
   });
 
@@ -28,7 +29,14 @@ class ReviewPublishScreen extends StatefulWidget {
   final VoidCallback? onEditPickup;
 
   /// Fired once the publish animation completes.
-  final void Function(SurplusDraft draft)? onPublished;
+  /// Publishes the draft and reports whether the server accepted it.
+  ///
+  /// The "Live" state is shown only when this returns true — a publish that
+  /// the backend rejected must never look like it worked.
+  final Future<bool> Function(SurplusDraft draft)? onPublish;
+
+  /// Called once the live state has been shown, to leave the flow.
+  final VoidCallback? onPublished;
 
   @override
   State<ReviewPublishScreen> createState() => _ReviewPublishScreenState();
@@ -43,16 +51,22 @@ class _ReviewPublishScreenState extends State<ReviewPublishScreen> {
     if (_state != _PublishState.idle) return;
     setState(() => _state = _PublishState.publishing);
 
-    // PHASE 5: POST the draft. The delay stands in so the design's three
-    // button states are all reachable.
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    final published = await widget.onPublish?.call(widget.draft) ?? false;
     if (!mounted) return;
 
+    if (!published) {
+      // Back to idle so the publisher can fix whatever the snackbar reported
+      // and try again. The design's success state is not shown.
+      setState(() => _state = _PublishState.idle);
+      return;
+    }
+
     setState(() => _state = _PublishState.live);
+    // Long enough for the design's confirmation state to register.
     await Future<void>.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
 
-    widget.onPublished?.call(widget.draft);
+    widget.onPublished?.call();
   }
 
   @override

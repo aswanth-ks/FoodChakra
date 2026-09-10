@@ -27,7 +27,10 @@ class ActiveRescueScreen extends StatefulWidget {
     this.onHelp,
     this.onReportProblem,
     this.onCancelRescue,
+    this.onOnTheWay,
+    this.onArrived,
     this.onCollected,
+    this.handoverCode,
     this.mapsLauncher = const MapsLauncher(),
   });
 
@@ -40,6 +43,24 @@ class ActiveRescueScreen extends StatefulWidget {
   final VoidCallback? onHelp;
   final VoidCallback? onReportProblem;
   final VoidCallback? onCancelRescue;
+
+  /// Confirms the rescuer has actually set off (`matched -> onTheWay`).
+  ///
+  /// Deliberately separate from "Start navigation": opening a maps app proves
+  /// only that someone looked at a route, not that they are travelling. The
+  /// rescue stays `matched` until the rescuer says otherwise.
+  final VoidCallback? onOnTheWay;
+
+  /// Tells the backend the rescuer has reached the pickup point
+  /// (`onTheWay -> arrived`), which is what issues the handover code.
+  final VoidCallback? onArrived;
+
+  /// The one-time handover code, once the backend has issued it.
+  ///
+  /// Held in memory for this screen only. It is deliberately never stored:
+  /// the server returns it exactly once, and a local copy would quietly
+  /// undo that guarantee.
+  final String? handoverCode;
 
   /// Advances to Rescue Complete.
   ///
@@ -122,6 +143,13 @@ class _ActiveRescueScreenState extends State<ActiveRescueScreen> {
                         listing: listing,
                         timeRemaining: widget.timeRemaining,
                       ),
+                      // Directly under the hero: once the code exists it is
+                      // the only thing the rescuer needs, and it should not
+                      // be something they have to scroll for.
+                      if (widget.handoverCode != null) ...[
+                        const SizedBox(height: 16),
+                        _HandoverCodeCard(code: widget.handoverCode!),
+                      ],
                       const SizedBox(height: 16),
                       _LifecycleStepper(stage: widget.stage),
                       const SizedBox(height: 16),
@@ -149,6 +177,8 @@ class _ActiveRescueScreenState extends State<ActiveRescueScreen> {
                   onStartNavigation: _launching ? null : _startNavigation,
                   onReportProblem: widget.onReportProblem,
                   onCancelRescue: widget.onCancelRescue,
+                  onOnTheWay: widget.onOnTheWay,
+                  onArrived: widget.onArrived,
                   onCollected: widget.onCollected,
                 ),
               ],
@@ -729,6 +759,8 @@ class _StickyActionBar extends StatelessWidget {
     this.onStartNavigation,
     this.onReportProblem,
     this.onCancelRescue,
+    this.onOnTheWay,
+    this.onArrived,
     this.onCollected,
   });
 
@@ -737,6 +769,8 @@ class _StickyActionBar extends StatelessWidget {
   final VoidCallback? onStartNavigation;
   final VoidCallback? onReportProblem;
   final VoidCallback? onCancelRescue;
+  final VoidCallback? onOnTheWay;
+  final VoidCallback? onArrived;
   final VoidCallback? onCollected;
 
   @override
@@ -775,37 +809,68 @@ class _StickyActionBar extends StatelessWidget {
                 height: 56,
                 onPressed: onStartNavigation,
               ),
+              // Exactly one forward action is offered at a time, decided by
+              // the rescue's server-side state: setting off, then arrival,
+              // then collection once the owner has confirmed the handover.
+              if (onOnTheWay != null) ...[
+                const SizedBox(height: 10),
+                _SecondaryAction(
+                  icon: Icons.directions_walk_rounded,
+                  label: "I'm on my way",
+                  onPressed: onOnTheWay,
+                ),
+              ],
+              if (onArrived != null) ...[
+                const SizedBox(height: 10),
+                _SecondaryAction(
+                  icon: Icons.place_outlined,
+                  label: "I've arrived",
+                  onPressed: onArrived,
+                ),
+              ],
               if (onCollected != null) ...[
                 const SizedBox(height: 10),
-                _CollectedButton(onPressed: onCollected),
+                _SecondaryAction(
+                  icon: Icons.check_circle_outline_rounded,
+                  label: 'I have collected this food',
+                  onPressed: onCollected,
+                ),
               ],
               const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  TextButton.icon(
-                    onPressed: onReportProblem,
-                    icon: const Icon(
-                      Icons.error_outline_rounded,
-                      size: 15,
-                      color: RescueColors.muted,
-                    ),
-                    label: Text(
-                      'Something wrong?',
-                      style: rescueFont(13, 500, color: RescueColors.muted),
-                    ),
-                    style: TextButton.styleFrom(
-                      foregroundColor: RescueColors.muted,
+                  // Both are Flexible so the row cannot overflow on a narrow
+                  // handset; at normal widths the labels are unchanged.
+                  Flexible(
+                    child: TextButton.icon(
+                      onPressed: onReportProblem,
+                      icon: const Icon(
+                        Icons.error_outline_rounded,
+                        size: 15,
+                        color: RescueColors.muted,
+                      ),
+                      label: Text(
+                        'Something wrong?',
+                        overflow: TextOverflow.ellipsis,
+                        style: rescueFont(13, 500, color: RescueColors.muted),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: RescueColors.muted,
+                      ),
                     ),
                   ),
-                  TextButton(
-                    onPressed: onCancelRescue,
-                    style: TextButton.styleFrom(
-                      foregroundColor: RescueColors.muted,
-                    ),
-                    child: Text(
-                      'Cancel rescue',
-                      style: rescueFont(13, 500, color: RescueColors.muted),
+                  Flexible(
+                    child: TextButton(
+                      onPressed: onCancelRescue,
+                      style: TextButton.styleFrom(
+                        foregroundColor: RescueColors.muted,
+                      ),
+                      child: Text(
+                        'Cancel rescue',
+                        overflow: TextOverflow.ellipsis,
+                        style: rescueFont(13, 500, color: RescueColors.muted),
+                      ),
                     ),
                   ),
                 ],
@@ -820,13 +885,21 @@ class _StickyActionBar extends StatelessWidget {
   }
 }
 
-/// Stands in for the partner's handover confirmation until Phase 5.
+/// A restrained outlined action beneath the primary CTA.
 ///
-/// Deliberately outlined rather than filled so it never competes with
-/// "Start navigation", which is the design's primary action.
-class _CollectedButton extends StatelessWidget {
-  const _CollectedButton({this.onPressed});
+/// Every forward step in a rescue — setting off, arriving, confirming
+/// collection — uses this one treatment. Deliberately outlined rather than
+/// filled so none of them competes with "Start navigation", which the design
+/// keeps as the primary action.
+class _SecondaryAction extends StatelessWidget {
+  const _SecondaryAction({
+    required this.icon,
+    required this.label,
+    this.onPressed,
+  });
 
+  final IconData icon;
+  final String label;
   final VoidCallback? onPressed;
 
   @override
@@ -836,13 +909,9 @@ class _CollectedButton extends StatelessWidget {
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: onPressed,
-        icon: const Icon(
-          Icons.check_circle_outline_rounded,
-          size: 19,
-          color: RescueColors.primary,
-        ),
+        icon: Icon(icon, size: 19, color: RescueColors.primary),
         label: Text(
-          'I have collected this food',
+          label,
           style: rescueFont(
             14.5,
             600,
@@ -857,6 +926,71 @@ class _CollectedButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The one-time handover code, shown to the rescuer to read out.
+///
+/// Built from the existing rescue tokens rather than new styling: the same
+/// card treatment as [_PickupInfoCard], with the code itself given the weight
+/// the design reserves for a primary figure.
+class _HandoverCodeCard extends StatelessWidget {
+  const _HandoverCodeCard({required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+      decoration: BoxDecoration(
+        color: RescueColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: RescueColors.sage, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.lock_outline_rounded,
+                size: 17,
+                color: RescueColors.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Your handover code',
+                style: rescueFont(
+                  13.5,
+                  700,
+                  color: RescueColors.primary,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            // Grouped 3-3 so it is easy to read aloud.
+            '${code.substring(0, 3)} ${code.substring(3)}',
+            style: rescueFont(
+              34,
+              700,
+              color: RescueColors.ink,
+              letterSpacing: 6,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Read this code out to the person giving the food. They confirm '
+            'it on their phone, and then you can collect.',
+            style: rescueFont(13, 500, color: RescueColors.muted, height: 1.45),
+          ),
+        ],
       ),
     );
   }

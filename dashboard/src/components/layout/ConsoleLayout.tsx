@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { clearSession, readSession } from '../../features/auth/session';
+import { readPreferences } from '../../features/settings/data/preferences';
 
 /** One sidebar destination. */
 interface NavEntry {
@@ -11,6 +12,14 @@ interface NavEntry {
   count?: number;
   /** Renders the count in the error colour, as Escalations does. */
   alert?: boolean;
+  /**
+   * Nested destinations, rendered indented beneath this entry.
+   *
+   * A section with several sibling pages lists them here rather than hiding
+   * them behind in-page tabs, so every page the console has is reachable from
+   * the sidebar.
+   */
+  children?: NavEntry[];
 }
 
 const MAIN_NAV: NavEntry[] = [
@@ -29,7 +38,30 @@ const MAIN_NAV: NavEntry[] = [
     count: 3,
     alert: true,
   },
-  { label: 'Zero-Waste Network', icon: 'hub' },
+  {
+    label: 'Zero-Waste Network',
+    icon: 'hub',
+    path: '/zero-waste',
+    children: [
+      { label: 'Overview', icon: 'dashboard', path: '/zero-waste' },
+      {
+        label: 'Fallback Opportunity',
+        icon: 'pending_actions',
+        path: '/zero-waste/fallback',
+      },
+      {
+        label: 'Recovery Partners',
+        icon: 'factory',
+        path: '/zero-waste/partners',
+      },
+      { label: 'Routing', icon: 'alt_route', path: '/zero-waste/routing' },
+      {
+        label: 'Recovery History',
+        icon: 'history_toggle_off',
+        path: '/zero-waste/history',
+      },
+    ],
+  },
   { label: 'Analytics', icon: 'insights', path: '/analytics' },
 ];
 
@@ -40,18 +72,18 @@ const MANAGEMENT_NAV: NavEntry[] = [
     icon: 'add_business',
     path: '/restaurants/onboard',
   },
-  { label: 'Rescuers', icon: 'sports_motorsports' },
-  { label: 'Locations', icon: 'distance' },
-  { label: 'Activity', icon: 'history' },
+  { label: 'Rescuers', icon: 'sports_motorsports', path: '/rescuers' },
+  { label: 'Locations', icon: 'distance', path: '/locations' },
+  { label: 'Activity', icon: 'history', path: '/activity' },
 ];
 
 /**
  * The console frame: fixed sidebar, fixed topbar, scrolling content.
  *
- * Overview, Live Rescues, Rescue Queue, Escalations and Analytics are built;
- * every other destination renders as a disabled row rather than a link to
- * nothing. They keep their counts because those come from the same fixtures
- * the built pages use.
+ * Every destination is built. Counts come from the same fixtures the built
+ * pages use. The Zero-Waste Network entry covers four pages; its three
+ * top-level views are reached from a section sub-nav on the pages themselves
+ * rather than from three more sidebar rows.
  */
 export default function ConsoleLayout({
   title,
@@ -68,6 +100,9 @@ export default function ConsoleLayout({
   const navigate = useNavigate();
   const location = useLocation();
   const session = readSession();
+  // Display-only preference, read per render so a change on the Settings page
+  // applies to the frame immediately.
+  const { density } = readPreferences();
 
   function handleSignOut() {
     clearSession();
@@ -75,7 +110,7 @@ export default function ConsoleLayout({
   }
 
   return (
-    <div className="shell">
+    <div className="shell" data-density={density}>
       <aside className="sidebar">
         <div className="sidebar__head">
           <div className="sidebar__brand">
@@ -127,14 +162,20 @@ export default function ConsoleLayout({
             </span>
           </div>
 
-          <div className="navitem navitem--disabled" aria-disabled="true">
+          <Link
+            to="/settings"
+            className={`navitem${
+              location.pathname === '/settings' ? ' navitem--active' : ''
+            }`}
+            aria-current={location.pathname === '/settings' ? 'page' : undefined}
+          >
             <span className="navitem__main">
               <span className="icon" style={{ fontSize: 18 }}>
                 settings
               </span>
               <span className="t-body-sm">Settings</span>
             </span>
-          </div>
+          </Link>
 
           <button
             className="userrow"
@@ -240,63 +281,124 @@ function NavGroup({
     <div className="navgroup">
       <span className="navgroup__label t-label-sm upper">{label}</span>
       <nav>
-        {entries.map((entry) => {
-          const count =
-            entry.count === undefined ? null : (
-              <span
-                className={[
-                  'navitem__count',
-                  't-label-sm',
-                  entry.alert ? 'navitem__count--alert' : '',
-                ].join(' ')}
-              >
-                {entry.count}
-              </span>
-            );
-
-          const body = (
-            <>
-              <span className="navitem__main">
-                <span className="icon" style={{ fontSize: 18 }}>
-                  {entry.icon}
-                </span>
-                <span className="t-body-sm truncate">{entry.label}</span>
-              </span>
-              {count}
-            </>
-          );
-
-          if (entry.path === undefined) {
-            return (
-              <div
-                key={entry.label}
-                className="navitem navitem--disabled"
-                aria-disabled="true"
-                title={`${entry.label} — not built yet`}
-              >
-                {body}
-              </div>
-            );
-          }
-
-          // The detail page lives under /live-rescues, so a prefix match keeps
-          // the parent destination highlighted while drilled in.
-          const active =
-            pathname === entry.path || pathname.startsWith(`${entry.path}/`);
-
-          return (
-            <Link
-              key={entry.label}
-              to={entry.path}
-              className={`navitem${active ? ' navitem--active' : ''}`}
-              aria-current={active ? 'page' : undefined}
-            >
-              {body}
-            </Link>
-          );
-        })}
+        {entries.map((entry) => (
+          <NavRow key={entry.label} entry={entry} pathname={pathname} />
+        ))}
       </nav>
     </div>
+  );
+}
+
+/** One sidebar destination, plus its nested pages when it has any. */
+function NavRow({
+  entry,
+  pathname,
+  child = false,
+  sectionRoot,
+}: {
+  entry: NavEntry;
+  pathname: string;
+  /** Renders the indented treatment used for nested pages. */
+  child?: boolean;
+  /** The parent section's path, passed down to nested rows. */
+  sectionRoot?: string;
+}) {
+  const count =
+    entry.count === undefined ? null : (
+      <span
+        className={[
+          'navitem__count',
+          't-label-sm',
+          entry.alert ? 'navitem__count--alert' : '',
+        ].join(' ')}
+      >
+        {entry.count}
+      </span>
+    );
+
+  const body = (
+    <>
+      <span className="navitem__main">
+        <span className="icon" style={{ fontSize: child ? 16 : 18 }}>
+          {entry.icon}
+        </span>
+        <span className="t-body-sm truncate">{entry.label}</span>
+      </span>
+      {count}
+    </>
+  );
+
+  const base = `navitem${child ? ' navitem--child' : ''}`;
+
+  if (entry.path === undefined) {
+    return (
+      <div
+        className={`${base} navitem--disabled`}
+        aria-disabled="true"
+        title={`${entry.label} — not built yet`}
+      >
+        {body}
+      </div>
+    );
+  }
+
+  const inSection =
+    pathname === entry.path || pathname.startsWith(`${entry.path}/`);
+
+  // A nested row whose path *is* the section root - the section's own Overview
+  // - has to match exactly. Prefix matching there would light it up on every
+  // page in the section, since every one of those paths starts with it.
+  // Deeper nested rows still prefix-match, so Fallback Opportunity stays lit
+  // while viewing one case at /zero-waste/fallback/:id.
+  const isSectionRoot = child && entry.path === sectionRoot;
+
+  // Three matching rules, because these rows mean different things:
+  //
+  // - A nested row matches exactly at the section root, by prefix below it.
+  // - A section header never takes the selected treatment itself; one of its
+  //   children is the page being viewed, and two highlighted rows for one page
+  //   reads as two selections.
+  // - Everything else prefix-matches, so a parent stays highlighted while
+  //   drilled into a detail page (/live-rescues/:id).
+  const active = child
+    ? isSectionRoot
+      ? pathname === entry.path
+      : inSection
+    : entry.children
+      ? false
+      : inSection;
+
+  // The section header still reads as current whenever any page beneath it is
+  // open - including a detail view like /zero-waste/fallback/:id, which has no
+  // nested row of its own to carry the selection.
+  const sectionOpen = entry.children !== undefined && inSection;
+
+  return (
+    <>
+      <Link
+        to={entry.path}
+        className={`${base}${active ? ' navitem--active' : ''}${
+          sectionOpen ? ' navitem--section' : ''
+        }`}
+        aria-current={active ? 'page' : undefined}
+      >
+        {body}
+      </Link>
+
+      {entry.children && (
+        <div className="navnest">
+          {entry.children.map((nested) => (
+            <NavRow
+              key={nested.label}
+              entry={nested}
+              pathname={pathname}
+              child
+              sectionRoot={entry.path}
+            />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

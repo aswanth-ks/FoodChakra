@@ -2,32 +2,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:foodloop/features/auth/domain/account_role.dart';
 
 void main() {
-  group('roleForEmail', () {
-    test('a foodloop.com address is a partner', () {
-      expect(roleForEmail('name@foodloop.com'), AccountRole.partner);
-      expect(roleForEmail('greenleaf@foodloop.com'), AccountRole.partner);
+  group('AccountRole.fromWire', () {
+    test('parses the roles the backend issues', () {
+      expect(AccountRole.fromWire('consumer'), AccountRole.consumer);
+      expect(AccountRole.fromWire('partner'), AccountRole.partner);
+      expect(AccountRole.fromWire('partner').isPartner, isTrue);
     });
 
-    test('is case- and whitespace-insensitive', () {
-      expect(roleForEmail('  Name@FoodLoop.COM '), AccountRole.partner);
+    test('fails closed on anything unrecognised', () {
+      // A role this build has never heard of must not become partner access.
+      for (final value in [null, '', 'admin', 'ops_admin', 'PARTNER', 'x']) {
+        expect(AccountRole.fromWire(value), AccountRole.consumer, reason: value);
+      }
+    });
+  });
+
+  group('email addresses carry no authority', () {
+    test('a foodloop.com address is not a partner role', () {
+      // Stage C deleted `roleForEmail()`. This test stands guard over that:
+      // the address a user types must never influence what they may do, and
+      // the only way to become a partner is for the server to say so.
+      expect(AccountRole.fromWire('someone@foodloop.com'), AccountRole.consumer);
+    });
+  });
+
+  group('AccountStatus.fromWire', () {
+    test('parses the statuses the backend issues', () {
+      expect(AccountStatus.fromWire('active'), AccountStatus.active);
+      expect(AccountStatus.fromWire('suspended'), AccountStatus.suspended);
+      expect(AccountStatus.fromWire('disabled'), AccountStatus.disabled);
     });
 
-    test('any other address is a consumer', () {
-      expect(roleForEmail('name@gmail.com'), AccountRole.consumer);
-      expect(roleForEmail('name@foodloop.co'), AccountRole.consumer);
-      expect(roleForEmail('name@my-foodloop.com'), AccountRole.consumer);
-    });
-
-    test('the domain must be the domain, not part of the local name', () {
-      // The rule reads the last @-segment, so an address that merely mentions
-      // the partner domain cannot claim partner access.
-      expect(roleForEmail('foodloop.com@example.org'), AccountRole.consumer);
-      expect(roleForEmail('a@foodloop.com@example.org'), AccountRole.consumer);
-    });
-
-    test('a malformed address falls back to consumer', () {
-      expect(roleForEmail(''), AccountRole.consumer);
-      expect(roleForEmail('not-an-email'), AccountRole.consumer);
+    test('an unknown status is treated as disabled', () {
+      expect(AccountStatus.fromWire(null), AccountStatus.disabled);
+      expect(AccountStatus.fromWire('weird'), AccountStatus.disabled);
     });
   });
 }

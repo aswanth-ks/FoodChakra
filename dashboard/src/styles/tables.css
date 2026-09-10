@@ -63,6 +63,28 @@
   background: var(--secondary-container);
 }
 
+/* Compact density, from console preferences (Settings). Tightens the dense
+   operational tables only; cards and panels keep their spacing. */
+.shell[data-density='compact'] .dtable th {
+  padding: 7px 12px;
+}
+
+.shell[data-density='compact'] .dtable td {
+  padding: 7px 12px;
+}
+
+/* The avatar + name/id cell shared by the Restaurants and Rescuers tables. */
+.partnercell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.partnercell > span:last-child > span {
+  display: block;
+}
+
 .dtable__sub {
   display: block;
   margin-top: 2px;

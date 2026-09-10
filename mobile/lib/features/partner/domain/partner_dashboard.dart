@@ -136,8 +136,8 @@ class PartnerActivityRow {
 
 /// Everything Partner Home renders in one shot.
 ///
-/// Phase 5 replaces the fixture with a repository read; the screen already
-/// takes this as a parameter so only the source changes.
+/// Built by `partnerDashboardProvider` from the partner's own listings. The
+/// screen takes it as a parameter, so it never reads the network itself.
 class PartnerDashboard {
   const PartnerDashboard({
     required this.profile,

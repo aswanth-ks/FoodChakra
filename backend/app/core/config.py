@@ -36,6 +36,32 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
+    # ----- External services -----
+    # Optional: nothing consumes it until the maps/geocoding work. Declared
+    # here so it is configured through the same typed path as everything else
+    # rather than read from os.environ ad hoc later. Empty means "not set up".
+    GOOGLE_MAPS_API_KEY: str = ""
+
+    # ----- Email (SMTP) -----
+    # Credentials live here and nowhere else. Nothing about SMTP is ever sent
+    # to a client, and no mobile or dashboard build reads any of it.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "FoodLoop"
+    SMTP_USE_TLS: bool = True
+    #: Hard ceiling on a single SMTP conversation. Login sends a notification
+    #: email, and a hung mail server must not hold a request open.
+    SMTP_TIMEOUT_SECONDS: float = 10.0
+
+    # ----- One-time codes -----
+    OTP_EXPIRE_MINUTES: int = 10
+    OTP_MAX_ATTEMPTS: int = 5
+    #: Minimum gap between two code emails to one address.
+    OTP_RESEND_COOLDOWN_SECONDS: int = 60
+
     # ----- CORS -----
     # Comma-separated in the environment, e.g. "http://localhost:5173,http://localhost:3000".
     # `NoDecode` stops pydantic-settings from JSON-parsing the raw value so the
@@ -52,6 +78,15 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def email_configured(self) -> bool:
+        """Whether outbound email can even be attempted.
+
+        Read before every send. When this is False the API says so plainly —
+        it never reports that a code was emailed when nothing left the process.
+        """
+        return bool(self.SMTP_HOST and self.SMTP_FROM_EMAIL)
 
 
 @lru_cache

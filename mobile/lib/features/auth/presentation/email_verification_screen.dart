@@ -11,9 +11,14 @@ import 'widgets/auth_widgets.dart';
 /// Faithful translation of the Stitch design
 /// (screen `e8885e82739a4d58a8736084dad28b36`).
 ///
-/// Reached straight after account creation: a 6-digit code has (notionally)
-/// been emailed to [email], and the user types it into the OTP row. UI only —
-/// [onVerify] / [onResend] are wired to the real auth service in Phase 3.
+/// Reached straight after account creation, and also when someone tries to
+/// sign in to an account whose address was never confirmed.
+///
+/// A real 6-digit code has been emailed to [email]; the user types it into the
+/// code row and [onVerify] sends it to `POST /auth/verify-email`. Nothing here
+/// knows or checks the code — the backend holds only a hash of it, and this
+/// screen has no way to tell a right code from a wrong one until the server
+/// answers.
 class EmailVerificationScreen extends StatefulWidget {
   const EmailVerificationScreen({
     super.key,

@@ -4,37 +4,39 @@
 /// they land in. Consumers rescue and share food; partners are businesses
 /// (restaurants, caterers, hotels) whose access is granted from the ops
 /// console, not by signing up in the app.
+///
+/// **The server decides this, and only the server.** The role arrives on the
+/// authenticated session from `GET /api/v1/auth/me` and is stored on
+/// [Account]. The previous `roleForEmail()` helper — which read the email's
+/// domain — was deleted in Stage C: a client-side check like that is bypassed
+/// by typing a different address, so it must never be what protects partner
+/// data.
 enum AccountRole {
   consumer,
   partner;
 
   bool get isPartner => this == AccountRole.partner;
+
+  /// Parses the server's wire value.
+  ///
+  /// An unrecognised role degrades to [consumer], the least-privileged option.
+  /// Failing closed matters: a future server role this build has never heard
+  /// of must not fall through to partner access.
+  static AccountRole fromWire(String? value) => switch (value) {
+    'partner' => AccountRole.partner,
+    _ => AccountRole.consumer,
+  };
 }
 
-/// The email domain that marks a partner account.
-const String kPartnerEmailDomain = 'foodloop.com';
+/// Whether an account may sign in, as decided by the backend.
+enum AccountStatus {
+  active,
+  suspended,
+  disabled;
 
-/// Decides an account's role from the email it signed in with.
-///
-/// **This is a stand-in, not authorization.** A partner is really a business
-/// that the ops console has granted access to, and only the server can say
-/// whether a given account holds that grant. Until the Phase 3 auth service
-/// exists there is no server to ask, so the domain stands in for the grant so
-/// the partner app is reachable and testable.
-///
-/// Phase 3 replaces this with the role claim on the authenticated session and
-/// deletes the domain rule — a client-side check like this is trivially
-/// bypassed by typing a different address, so it must never be what actually
-/// protects partner data.
-AccountRole roleForEmail(String email) {
-  final normalised = email.trim().toLowerCase();
-  // Guards against "foodloop.com" appearing anywhere but the domain, e.g.
-  // "foodloop.com@example.org".
-  final at = normalised.lastIndexOf('@');
-  if (at == -1) return AccountRole.consumer;
-
-  final domain = normalised.substring(at + 1);
-  return domain == kPartnerEmailDomain
-      ? AccountRole.partner
-      : AccountRole.consumer;
+  static AccountStatus fromWire(String? value) => switch (value) {
+    'active' => AccountStatus.active,
+    'suspended' => AccountStatus.suspended,
+    _ => AccountStatus.disabled,
+  };
 }

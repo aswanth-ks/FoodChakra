@@ -8,10 +8,14 @@ import 'widgets/auth_widgets.dart';
 /// Faithful translation of the Stitch design
 /// (screen `21993dcd125d4786bb20d167e90c2747`).
 ///
-/// UI only. Nothing is submitted anywhere: the auth service and its repository
-/// arrive in Phase 3, at which point [onSendResetLink] is replaced by a
-/// notifier call. The design is a single state — enter an email, send the
-/// link; the "check your email" confirmation is its own screen.
+/// Wired to `POST /auth/forgot-password`. The backend answers identically
+/// whether or not the address is registered, so this screen always moves on
+/// to [ResetPasswordScreen] — branching on the result would leak exactly what
+/// that design hides.
+///
+/// The design says "reset link". FoodLoop sends a 6-digit code instead, so the
+/// copy says code: a screen that promises a link and delivers a code sends the
+/// user hunting for a button that is not in the email.
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({
     super.key,
@@ -114,7 +118,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             ),
                             const SizedBox(height: 20),
                             AuthPrimaryButton(
-                              label: 'Send reset link',
+                              label: 'Send reset code',
                               onPressed: _submit,
                             ),
                             const SizedBox(height: 20),
@@ -174,7 +178,7 @@ class _Header extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 310),
           child: Text(
             'No worries. Enter the email address linked to your FoodLoop '
-            'account and we’ll send you a reset link.',
+            'account and we’ll send you a 6-digit reset code.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: AppTypography.fontFamily,

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/widgets/consumer_nav_bar.dart';
-import '../data/sample_activity.dart';
 import '../domain/activity_item.dart';
 import 'widgets/rescue_widgets.dart';
 
@@ -21,10 +20,10 @@ import 'widgets/rescue_widgets.dart';
 class ActivityScreen extends StatefulWidget {
   const ActivityScreen({
     super.key,
-    this.active = SampleActivity.active,
-    this.history = SampleActivity.history,
-    this.historyHeading = SampleActivity.historyHeading,
-    this.historySummary = SampleActivity.historySummary,
+    this.active = const [],
+    this.history = const [],
+    this.historyHeading = '',
+    this.historySummary = '',
     this.onFilter,
     this.onOpenActivity,
     this.onSelectTab,

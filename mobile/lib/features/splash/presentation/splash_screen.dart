@@ -15,16 +15,18 @@ import '../../../app/theme/app_typography.dart';
 /// The design's status bar and home-indicator are device chrome mockups — the
 /// operating system draws those, so they are deliberately not reproduced.
 ///
-/// Once the entrance animation finishes the screen advances to onboarding.
 /// The design specifies no hold duration, so a short one is used to let the
-/// reveal be seen. Phase 3 will replace this with an auth/role-aware redirect
-/// that skips onboarding for returning users.
+/// reveal be seen. When it ends the screen reports that it is done and stops
+/// there: the router's authentication gate chooses the destination, once the
+/// session restore has also settled. A returning user therefore never sees
+/// onboarding, and a slow restore is waited for here rather than flickering
+/// through a sign-in screen.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, this.onComplete});
 
-  /// Called once the entrance animation has finished and rested. The router
-  /// supplies the destination, so this screen stays navigation-agnostic and
-  /// testable without a router.
+  /// Called once the entrance animation has finished and rested. It reports
+  /// only that the animation is over — never where to go — so this screen
+  /// stays navigation-agnostic and testable without a router.
   final VoidCallback? onComplete;
 
   @override

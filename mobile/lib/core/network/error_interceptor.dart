@@ -48,6 +48,11 @@ class ErrorInterceptor extends Interceptor {
 
     return switch (status) {
       401 => UnauthorizedFailure(message ?? 'Please sign in again.'),
+      // The code, not the status, distinguishes these two: both are 403, but
+      // one means "sign in again" and the other means "go and verify".
+      403 when code == 'EMAIL_NOT_VERIFIED' => EmailNotVerifiedFailure(
+        message ?? 'Verify your email address to sign in.',
+      ),
       403 => ForbiddenFailure(
         message ?? 'You do not have permission to do this.',
       ),
@@ -56,6 +61,12 @@ class ErrorInterceptor extends Interceptor {
         message ?? 'Please check the highlighted fields.',
         code: code,
         details: details,
+      ),
+      429 => TooManyAttemptsFailure(
+        message ?? 'Too many attempts. Please try again in a moment.',
+      ),
+      503 => ServiceUnavailableFailure(
+        message ?? 'That service is unavailable right now.',
       ),
       >= 500 => ServerFailure(
         message ?? 'Something went wrong. Please try again.',

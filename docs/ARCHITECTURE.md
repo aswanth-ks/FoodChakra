@@ -103,6 +103,102 @@ on shutdown.
 must stay reachable so the failure is observable rather than invisible — it reports
 `status: "degraded"` instead.
 
+### 2.7 The canonical lifecycle (Stage B)
+
+`app/shared/lifecycle.py` holds **the** state machine. There is exactly one.
+
+The audit found three lifecycle enums already in the codebase — the console's nine
+`LifecycleStep`s, mobile's five `RescueStage`s, partner's six `PartnerSurplusStatus`es. They
+describe one journey at three levels of detail. The backend stores the **widest** (the
+console's) and narrows it for the other clients through pure functions in the same module.
+
+- `LifecycleState` — all thirteen states. Wire values use the console's exact spelling
+  (`"onTheWay"`), so the dashboard's TypeScript unions parse responses untranslated.
+- `LISTING_STATES` / `RESCUE_STATES` — which subset each document may hold. Ownership of the
+  journey passes from the listing to the rescue at `matched`.
+- `LISTING_TRANSITIONS` / `RESCUE_TRANSITIONS` + `can_transition()` — legality lives here, not
+  in each service, so the rules cannot diverge per feature.
+- `to_rescue_stage()` / `to_partner_status()` — the client projections.
+
+**Rule:** no feature module may define its own status enum. Adding a state is an edit to this
+one file, and `tests/test_lifecycle.py` fails loudly if a new state is left out of the
+listing/rescue split or of a client projection.
+
+### 2.8 Collections, indexes and the claim race (Stage B)
+
+`app/db/collections.py` names the ten collections; `app/db/indexes.py` declares every index and
+creates them idempotently in the lifespan. Repositories import the name constants rather than
+writing string literals — MongoDB silently creates `db.listing` for a typo and then returns
+nothing forever.
+
+Two index categories carry real weight:
+
+- **`2dsphere`** — Explore is a `$near` and the dynamic radius is a `$geoWithin`. Without these
+  the features cannot be written at all, not merely written slowly.
+- **`uniq_active_rescue_per_listing`** — a *partial* unique index on `rescues.listing_id`
+  filtered to non-terminal statuses. This is the only correct place to enforce "one active
+  rescue per listing": a check-then-insert in the service loses the race when two consumers tap
+  Rescue within the same few milliseconds, and the window is small enough to pass every manual
+  test before failing in production. The filter is partial rather than plain-unique so that a
+  cancelled rescue frees its listing instead of burning the surplus permanently. Its state list
+  is derived from `RESCUE_ACTIVE_STATES`, so it cannot fall behind the lifecycle.
+
+Stage E completes the pair with an atomic `find_one_and_update` on the listing. The loser gets a
+duplicate-key error, which the repository translates to `ConflictError` -> `409`.
+
+`ensure_indexes()` pings once before creating anything: each `create_indexes` against an
+unreachable server blocks for the full server-selection timeout, and ten of those would stall
+startup behind an outage that `/health` exists to report.
+
+### 2.9 Activity events (Stage B)
+
+`app/features/activity/` is the append-only audit trail. One collection serves the console's
+Activity Log, the Analytics aggregations, and (much later) Predictive Demand's input — which is
+why it is captured from day one: reconstructing this history retroactively is impossible.
+
+`ActivityService.record()` **never raises**. A failed audit write must not roll back the
+operation that triggered it; losing a log line is bad, making the audit collection a single
+point of failure for every rescue is worse. That trade-off holds only while nothing reads
+`activity_events` to make a decision — if anything ever does, revisit it.
+
+The feature has no router. Nothing is exposed over HTTP until the ops console needs it (Stage H).
+
+### 2.10 Authentication and authorization (Stage C)
+
+`app/core/security.py` is the only module that imports `bcrypt` or `jwt`. Everything else goes
+through `app/features/auth/`.
+
+**Roles vs. staff access.** `AccountRole` has exactly two values — `consumer` and `partner` —
+because the product has two account kinds. Operations access is **not** a third role: it is an
+optional `staff` capability on the user document, checked by `require_staff`. Role answers
+"what kind of account is this"; staff answers "may they open the console". They are unrelated
+questions, and an operator may well also hold a consumer account — collapsing both onto one
+field forces a false choice and is how privilege bugs start. This supersedes the `ops_admin`
+role sketched in `BACKEND_CONTRACT.md` §6.
+
+**The client is never trusted.** `RegisterRequest` has no `role`, `status`, `staff` or
+`partner_id` field and is `extra="forbid"`, so an escalation attempt is a `422`, not a silent
+downgrade. Public registration hardcodes an active consumer.
+
+**Tokens assert identity, the database decides permission.** `get_current_user` re-reads the
+user record on every request rather than trusting the token's role claim. That costs one
+indexed lookup and makes a suspension or role change effective immediately instead of lingering
+for up to the access token's lifetime. Refresh tokens deliberately carry no role at all: they
+outlive role changes.
+
+**Refresh rotation is single-use.** The jti is consumed with an atomic `$pull`, which is the
+check — a replayed token finds nothing to consume, and the response is to revoke every session
+on the account, since replay means the token was captured. Sessions are embedded on the user
+document (capped, always read with their user), so no eleventh collection was needed.
+
+**Authorization lives in dependencies**, never in route bodies: `get_current_user`,
+`require_consumer`, `require_partner`, `require_staff`. A route declares its requirement in its
+signature and so cannot forget the check.
+
+**Deleted on the client:** `roleForEmail()`. An email domain is not an authorization, and a
+client-side check is bypassed by typing a different address. The Flutter app now learns its
+role from `/auth/me` only — `mobile/test/account_role_test.dart` stands guard over that.
+
 ---
 
 ## 3. Mobile architecture (Flutter)
@@ -226,3 +322,33 @@ Already in place:
 
 Phase 3 adds bcrypt password hashing and JWT access/refresh tokens with a role claim.
 Phase 17 adds rate limiting, upload validation, input sanitization, and an audit trail.
+
+---
+
+## Live verification (Stage K)
+
+`backend/scripts/live_atlas_smoke_test.py` exercises the real services against the real Atlas
+cluster and a real uvicorn process:
+
+```bash
+cd backend
+python -m scripts.live_atlas_smoke_test
+```
+
+It is **not** part of `pytest`, and must not become part of it. The unit suite has to keep
+running for someone with no Atlas credentials and no SMTP account, and a test suite that needs
+a live cluster stops being run.
+
+What it adds over the unit tests is the part that fakes cannot answer: whether MongoDB itself
+applies the conditional updates, whether the partial unique index actually refuses a second
+active rescue, and whether documents survive the process that wrote them.
+
+Safety rules it follows, and that any future live script must follow too:
+
+- Every document it creates is recorded and deleted by `_id` in a `finally`. It never deletes
+  by query, so a bug in it cannot reach a document it did not create.
+- Temporary accounts use a unique `+tag` on the configured sending address, so they cannot
+  collide with a real user and are obvious in the Atlas UI.
+- Nothing it prints is a credential — not a password, a one-time code, a handover code, a
+  token, an SMTP setting or a connection string. Codes are captured in memory to drive the
+  flow and compared, never displayed.

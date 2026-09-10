@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/widgets/consumer_nav_bar.dart';
-import '../data/sample_listings.dart';
 import '../domain/food_listing.dart';
 import 'widgets/rescue_widgets.dart';
 
@@ -17,8 +16,10 @@ class ExploreScreen extends StatefulWidget {
   const ExploreScreen({
     super.key,
     this.location = 'Karur, Tamil Nadu',
-    this.listings = SampleListings.explore,
+    this.listings = const [],
     this.newOpportunityCount = 3,
+    this.selectedFilter,
+    this.onSelectFilter,
     this.onChangeLocation,
     this.onFilters,
     this.onOpenListing,
@@ -30,6 +31,12 @@ class ExploreScreen extends StatefulWidget {
 
   /// Drives the "3 new opportunities" counter on the live banner.
   final int newOpportunityCount;
+
+  /// The active chip. Lifted out of the screen so the chosen filter can drive
+  /// the actual query — a chip that looks selected while returning unfiltered
+  /// results is worse than no filter at all.
+  final String? selectedFilter;
+  final void Function(String filter)? onSelectFilter;
 
   final VoidCallback? onChangeLocation;
   final VoidCallback? onFilters;
@@ -54,7 +61,10 @@ enum _ResultView { list, map }
 
 class _ExploreScreenState extends State<ExploreScreen> {
   final _search = TextEditingController();
-  String _selectedFilter = ExploreScreen.filters.first;
+  String _localFilter = ExploreScreen.filters.first;
+
+  /// The caller owns the filter when it passes one in.
+  String get _selectedFilter => widget.selectedFilter ?? _localFilter;
   _ResultView _view = _ResultView.list;
 
   @override
@@ -93,7 +103,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 _FilterChipRow(
                   filters: ExploreScreen.filters,
                   selected: _selectedFilter,
-                  onSelect: (f) => setState(() => _selectedFilter = f),
+                  onSelect: (f) {
+                    setState(() => _localFilter = f);
+                    widget.onSelectFilter?.call(f);
+                  },
                 ),
                 const SizedBox(height: 16),
                 _ResultControls(
@@ -338,9 +351,14 @@ class _ResultControls extends StatelessWidget {
               const SizedBox(height: 2),
               Row(
                 children: [
-                  Text(
-                    'Sorted by distance',
-                    style: rescueFont(11.5, 400, color: RescueColors.muted),
+                  // Flexible so a narrow handset ellipsises rather than
+                  // overflowing; unchanged at normal widths.
+                  Flexible(
+                    child: Text(
+                      'Sorted by distance',
+                      overflow: TextOverflow.ellipsis,
+                      style: rescueFont(11.5, 400, color: RescueColors.muted),
+                    ),
                   ),
                   const SizedBox(width: 3),
                   const Icon(
@@ -451,18 +469,24 @@ class _LiveStreamBanner extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              const LiveDot(size: 8),
-              const SizedBox(width: 8),
-              Text(
-                'Live nearby stream',
-                style: rescueFont(11.5, 500, color: RescueColors.primary),
-              ),
-            ],
+          Flexible(
+            child: Row(
+              children: [
+                const LiveDot(size: 8),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Live nearby stream',
+                    overflow: TextOverflow.ellipsis,
+                    style: rescueFont(11.5, 500, color: RescueColors.primary),
+                  ),
+                ),
+              ],
+            ),
           ),
           Text(
             '$newCount new opportunities',
+            overflow: TextOverflow.ellipsis,
             style: rescueFont(11, 600, color: RescueColors.primary),
           ),
         ],
