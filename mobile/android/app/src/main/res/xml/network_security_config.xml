@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 9 (API 28) and later refuse plaintext HTTP by default. That default
+  is correct and stays in force: `cleartextTrafficPermitted="false"` below
+  means the app cannot talk HTTP to anything on the internet, so a production
+  build is HTTPS-only whatever base URL it is handed.
+
+  The exception list is for development against a backend running on a
+  developer's own machine, which has no certificate. Each entry is a specific
+  host, never a wildcard — the alternative, `android:usesCleartextTraffic`
+  on <application>, switches plaintext on for *every* destination and would
+  silently weaken the shipped app.
+
+  Adding a machine: put its LAN IP here and pass the same address to Flutter
+  with --dart-define=API_BASE_URL. The Dart side is still the single source of
+  the URL; this file only says which hosts are allowed to be spoken to in the
+  clear.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Development machine on the LAN, for testing on a real handset. -->
+        <domain includeSubdomains="false">172.23.204.239</domain>
+
+        <!-- The Android emulator's alias for the host machine's loopback. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+
+        <!-- A backend reached over `adb reverse tcp:8000 tcp:8000`. -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

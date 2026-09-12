@@ -1,6 +1,6 @@
 # FoodLoop — Project Status
 
-**Last updated:** 2026-09-10 (Stage K — live Atlas integration verification)
+**Last updated:** 2026-09-12 (final backend verification)
 **Current phase:** Backend Stage H — Dynamic Rescue Radius / Smart Escalation (not started)
 **Phases complete:** 0 (Foundation), 1 (Architecture)
 **Backend stages complete:** A (Audit + design), B (Foundation), C (Authentication), D (Listings), E (Rescues), F (Handover verification), G (Walkable loop), G.1 (Travel transition), H (Mobile completion)
@@ -168,6 +168,54 @@ Collected → Completed.**
 **Two UI pieces remain before the loop is walkable in the app** — see the Stage F report:
 the rescuer's arrival + code display, and the owner's confirmation entry. The backend contract
 for both is complete and documented in `docs/API.md`.
+
+### Final backend verification — 2026-09-12
+
+A full re-verification before the Operations Console. **Atlas was unreachable that day** —
+outbound 27017 refused on the college network, the same signature as the original B1 — so the
+live checks could not be re-run. What that day could prove, it proved; what it could not, it
+says so about rather than inheriting Stage K's result silently.
+
+**Verified fresh, 2026-09-12:**
+
+| Area | How |
+|---|---|
+| Startup failure behaviour | uvicorn started with Mongo unreachable: it **logs the failure and exits**. It does not come up pretending the database is healthy. |
+| Real SMTP | `scripts.send_test_email` delivered through `smtp.gmail.com:587`. Port 587 is open; only 27017 is blocked. |
+| Route/auth inventory | Generated from the built app. All 14 product endpoints authenticated; the only public routes are health, the auth bootstrap, and the docs. |
+| Mobile ↔ backend contract | New `scripts/check_mobile_contract.py`: all 24 routes accounted for, **no mobile call without a route**. |
+| Error envelope, input validation, CORS, OpenAPI | New `tests/test_api_hardening.py`, 35 tests. |
+| Credential and fake-code audit | No real credential in tracked source; no executable fake authentication; the redacting log interceptor is still the one installed. |
+
+**Inherited from Stage K (2026-09-10), not re-run:** every live-Atlas result — the concurrent
+claim, the partial index, the lifecycle, the handover, live authorization, and restart
+persistence. Those are two days old and were green; they are not evidence about today.
+
+#### New structural guards
+
+`tests/test_api_hardening.py` walks the built application rather than listing endpoints, so a
+route added in a later stage is covered the day it is added:
+
+- **every route is authenticated unless it is on a named public list**, and the public list
+  cannot grow without the test failing — the guard that matters most going into a stage that
+  adds staff endpoints;
+- every `*Request` model sets `extra="forbid"`, so a privilege-escalation attempt is a 422
+  rather than a silent no-op;
+- `alg: none` and other malformed `Authorization` headers are clean 401s;
+- pagination limits are refused at the query-parameter bound;
+- no response carries a stack trace, a connection string, a bcrypt hash or an SMTP setting.
+
+**No defect was found.** Nothing in the application was changed.
+
+#### One thing worth knowing
+
+Startup is now fail-fast: `main.py` no longer wraps `ensure_indexes()` in a `try`, so an
+unreachable database stops the process instead of leaving `/health` up reporting `degraded`.
+That is the right trade for a deployment with a supervisor to restart it, and it is why the
+API cannot be exercised at all while 27017 is blocked — worth remembering rather than
+rediscovering.
+
+Backend **373 passed** (was 338), mobile **170 passed**, `ruff` and `flutter analyze` clean.
 
 ### Stage K — Live Atlas integration verification — **Complete**
 
@@ -421,7 +469,7 @@ else in Stage F was reused unchanged, and `lifecycle.py` was not touched.
 ## 3. Verification results
 
 ```text
-backend    pytest ................ 338 passed (Stage J)
+backend    pytest ................ 373 passed (final verification)
 backend    ruff check ............ All checks passed
 backend    uvicorn boot .......... OK, /docs and /openapi.json served
 backend    MongoDB Atlas ......... REACHABLE — 10 collections, 31 indexes present
@@ -448,7 +496,7 @@ running the code:
 
 | # | Blocker | Impact | Owner |
 |---|---|---|---|
-| ~~B1~~ | ~~Cannot reach MongoDB Atlas — outbound port 27017 blocked.~~ **RESOLVED** — the cluster is reachable as of Stage J. `scripts/inspect_db.py` lists all 10 collections with their 31 indexes present, including `uniq_active_rescue_per_listing`, and a live probe exercised registration, the unverified-login refusal and a wrong-code attempt against the real database. Earlier stages were verified against fakes only; that is still true of them, and re-verifying the rescue loop live is worth doing. | — | Done |
+| **B1** | **Atlas reachability comes and goes with the network.** Reachable 2026-09-10 (Stage K ran 136 live checks against it); refused again on 27017 by 2026-09-12 on the college network. SMTP on 587 stays open, so only the database is affected, and nothing is wrong with the credentials or the cluster — the failure is at TCP connect, before authentication. | Live verification can only be run from a network that permits 27017. Startup is fail-fast, so the API will not come up at all while it is blocked. | User — run `python -m scripts.live_atlas_smoke_test` from a permitting network; a mobile hotspot has worked before. |
 | ~~B2~~ | ~~Stitch designs not accessible.~~ **RESOLVED** — Stitch MCP connected at local scope; 46 mobile + 2 ops screens inventoried in `docs/UI_INVENTORY.md`. | — | Done |
 | B3 | **Exposed API key.** The Stitch key was pasted into chat twice and must be considered compromised. It is stored in `~/.claude.json` (outside the repo, not in git). | Security. | User — rotate it, then re-run `claude mcp add`. |
 | **B8** | **SMTP app password shared in chat.** The Gmail app password was pasted into the conversation, so it must be treated as compromised. It is in `backend/.env`, which is git-ignored and was never committed. | Security. | User — revoke it at Google Account → Security → App passwords once the demo is done, and issue a fresh one. |
