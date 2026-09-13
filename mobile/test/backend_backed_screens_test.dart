@@ -13,6 +13,11 @@ import 'package:foodloop/features/rescue/presentation/explore_view.dart';
 import 'package:foodloop/features/rescue/presentation/impact_providers.dart';
 import 'package:foodloop/features/rescue/presentation/listing_providers.dart';
 import 'package:foodloop/features/rescue/presentation/rescue_providers.dart';
+import 'package:foodloop/core/location/location_cache.dart';
+import 'package:foodloop/core/location/location_providers.dart';
+
+import 'support/fake_location_cache.dart';
+import 'support/inert_location_service.dart';
 
 FoodListing listing({
   String id = 'l1',
@@ -144,6 +149,13 @@ ProviderContainer container({
     // tests assert the first outcome.
     retry: (retryCount, error) => null,
     overrides: [
+        // Nothing remembered from a previous launch, and no platform channel
+        // to hang on. Tests that want a remembered fix seed it themselves.
+        locationCacheProvider.overrideWithValue(FakeLocationCache()),
+        // No platform channel for these tests to hang on either.
+        locationServiceProvider.overrideWithValue(
+          const InertLocationService(),
+        ),
       if (listings != null)
         listingRepositoryProvider.overrideWithValue(listings),
       if (rescues != null) rescueRepositoryProvider.overrideWithValue(rescues),

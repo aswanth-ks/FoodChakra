@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter_map/flutter_map.dart' show TileProvider;
+
+import '../../../core/error/failures.dart';
+import '../../../core/map/foodloop_map.dart';
+import '../../../core/map/geo_point.dart';
 import '../../../shared/widgets/consumer_nav_bar.dart';
 import '../domain/food_listing.dart';
 import 'widgets/rescue_widgets.dart';
@@ -9,15 +14,27 @@ import 'widgets/rescue_widgets.dart';
 /// Faithful translation of the Stitch design
 /// (screen `03d1ce15100b42a2bddce7b60f3274df`).
 ///
-/// UI only. Search, the filter chips and the list/map toggle keep their state
-/// locally but do not filter the results yet — the query goes to the listings
-/// API in Phase 5, at which point [listings] is fed from a repository.
+/// [listings] comes from the listings API, and the chips drive that query
+/// rather than only their own appearance.
+///
+/// The header, the chip row and the view toggle are drawn in every state.
+/// They used to be replaced wholesale by a spinner, an empty view or an error
+/// view, which meant a filter that happened to match nothing also removed the
+/// only control that could change it — the user had to leave Explore to get
+/// back. Only the results area below the chips swaps between the four states.
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({
     super.key,
     this.location = 'Karur, Tamil Nadu',
     this.listings = const [],
     this.newOpportunityCount = 3,
+    this.resultsLoading = false,
+    this.resultsError,
+    this.onRetry,
+    this.emptyMessage,
+    this.origin,
+    this.tileProvider,
+    this.initialView = ExploreResultView.list,
     this.selectedFilter,
     this.onSelectFilter,
     this.onChangeLocation,
@@ -31,6 +48,34 @@ class ExploreScreen extends StatefulWidget {
 
   /// Drives the "3 new opportunities" counter on the live banner.
   final int newOpportunityCount;
+
+  /// Whether the query behind [listings] is still running.
+  final bool resultsLoading;
+
+  /// Non-null when that query failed. An empty [listings] with no error is a
+  /// successful "nothing nearby", which is a different thing and gets
+  /// different copy.
+  final Object? resultsError;
+
+  final VoidCallback? onRetry;
+
+  /// Filter-specific wording for the empty state, when the caller has better
+  /// context than "nothing nearby".
+  final String? emptyMessage;
+
+  /// Where the map opens: the device's own position. Null until a real fix
+  /// exists, in which case the map says so rather than opening on a guess.
+  final GeoPoint? origin;
+
+  /// Overridden in tests so no tile is fetched.
+  final TileProvider? tileProvider;
+
+  /// Which half of the List/Map toggle the screen opens on.
+  ///
+  /// Home's map preview arrives here expecting the map, and landing on the
+  /// list after tapping a map would be a non-sequitur. The toggle is live
+  /// either way — this only decides the first frame.
+  final ExploreResultView initialView;
 
   /// The active chip. Lifted out of the screen so the chosen filter can drive
   /// the actual query — a chip that looks selected while returning unfiltered
@@ -57,7 +102,11 @@ class ExploreScreen extends StatefulWidget {
   State<ExploreScreen> createState() => _ExploreScreenState();
 }
 
-enum _ResultView { list, map }
+/// Which results view Explore is showing.
+///
+/// Public because callers choose the opening one — Home's map card opens
+/// straight onto the map.
+enum ExploreResultView { list, map }
 
 class _ExploreScreenState extends State<ExploreScreen> {
   final _search = TextEditingController();
@@ -65,7 +114,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   /// The caller owns the filter when it passes one in.
   String get _selectedFilter => widget.selectedFilter ?? _localFilter;
-  _ResultView _view = _ResultView.list;
+  late ExploreResultView _view = widget.initialView;
 
   @override
   void dispose() {
@@ -110,14 +159,27 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 ),
                 const SizedBox(height: 16),
                 _ResultControls(
-                  count: listings.length,
+                  // No count is claimed until one is known.
+                  count: widget.resultsLoading || widget.resultsError != null
+                      ? 0
+                      : listings.length,
                   view: _view,
                   onViewChanged: (v) => setState(() => _view = v),
                 ),
                 const SizedBox(height: 14),
                 _LiveStreamBanner(newCount: widget.newOpportunityCount),
                 const SizedBox(height: 12),
-                if (_view == _ResultView.list)
+                // Exactly one of four: loading, failed, empty, or results.
+                if (widget.resultsLoading)
+                  const _ResultsSkeleton()
+                else if (widget.resultsError != null)
+                  _ResultsError(
+                    error: widget.resultsError!,
+                    onRetry: widget.onRetry,
+                  )
+                else if (listings.isEmpty)
+                  _NoResults(message: widget.emptyMessage)
+                else if (_view == ExploreResultView.list)
                   for (var i = 0; i < listings.length; i++) ...[
                     if (i > 0) const SizedBox(height: 12),
                     ExploreListingCard(
@@ -127,11 +189,157 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     ),
                   ]
                 else
-                  const _MapViewPlaceholder(),
+                  _ResultsMap(
+                    origin: widget.origin,
+                    listings: listings,
+                    onOpenListing: widget.onOpenListing,
+                    tileProvider: widget.tileProvider,
+                  ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shapes only while the query runs. Nothing here resembles a food card with
+/// content: a skeleton carrying plausible titles or distances would be
+/// indistinguishable from surplus food that does not exist.
+class _ResultsSkeleton extends StatelessWidget {
+  const _ResultsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var i = 0; i < 3; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          Semantics(
+            label: 'Loading nearby food',
+            child: Container(
+              height: 118,
+              decoration: BoxDecoration(
+                color: RescueColors.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE9EDEA)),
+              ),
+              child: const Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// A successful query that found nothing. Not an error, and never dressed up
+/// as one.
+class _NoResults extends StatelessWidget {
+  const _NoResults({this.message});
+
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    return RescueCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.eco_outlined,
+                size: 18,
+                color: RescueColors.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Nothing to rescue right now',
+                  style: rescueFont(15, 700, color: RescueColors.ink),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message ??
+                'No surplus food is available nearby yet. Check back later '
+                    'for new opportunities.',
+            style: rescueFont(13, 400, color: RescueColors.muted, height: 1.45),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A failed query. Distinct from [_NoResults] on purpose — telling someone
+/// there is no food nearby when the request never arrived is a lie.
+class _ResultsError extends StatelessWidget {
+  const _ResultsError({required this.error, this.onRetry});
+
+  final Object error;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final failure = error is Failure ? error as Failure : null;
+    return RescueCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 18,
+                color: RescueColors.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "Couldn't load nearby food",
+                  style: rescueFont(15, 700, color: RescueColors.ink),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            // The server's own wording where there is one; never raw
+            // exception text.
+            failure?.message ?? 'Please try again.',
+            style: rescueFont(13, 400, color: RescueColors.muted, height: 1.45),
+          ),
+          if (onRetry != null) ...[
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(
+                foregroundColor: RescueColors.primary,
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 6,
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Try again',
+                style: rescueFont(13, 600, color: RescueColors.primary),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -331,8 +539,8 @@ class _ResultControls extends StatelessWidget {
   });
 
   final int count;
-  final _ResultView view;
-  final void Function(_ResultView view) onViewChanged;
+  final ExploreResultView view;
+  final void Function(ExploreResultView view) onViewChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -382,8 +590,8 @@ class _ResultControls extends StatelessWidget {
 class _ViewToggle extends StatelessWidget {
   const _ViewToggle({required this.view, required this.onChanged});
 
-  final _ResultView view;
-  final void Function(_ResultView view) onChanged;
+  final ExploreResultView view;
+  final void Function(ExploreResultView view) onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -400,14 +608,14 @@ class _ViewToggle extends StatelessWidget {
           _segment(
             label: 'List',
             icon: Icons.view_list_rounded,
-            active: view == _ResultView.list,
-            onTap: () => onChanged(_ResultView.list),
+            active: view == ExploreResultView.list,
+            onTap: () => onChanged(ExploreResultView.list),
           ),
           _segment(
             label: 'Map',
             icon: Icons.map_outlined,
-            active: view == _ResultView.map,
-            onTap: () => onChanged(_ResultView.map),
+            active: view == ExploreResultView.map,
+            onTap: () => onChanged(ExploreResultView.map),
           ),
         ],
       ),
@@ -792,38 +1000,100 @@ class _RescueButton extends StatelessWidget {
 
 /// The map half of the segmented control.
 ///
-/// PHASE 8: replaced by the real map, alongside the two stylised maps on Home
-/// and Active Rescue. Until then the toggle is honest about what it has.
-class _MapViewPlaceholder extends StatelessWidget {
-  const _MapViewPlaceholder();
+/// Every pin is a listing the API returned, at the coordinate the API returned
+/// for it. There are no sample markers: a map that draws food which does not
+/// exist is worse than no map, because someone will travel to it.
+class _ResultsMap extends StatelessWidget {
+  const _ResultsMap({
+    required this.origin,
+    required this.listings,
+    this.onOpenListing,
+    this.tileProvider,
+  });
+
+  final GeoPoint? origin;
+  final List<FoodListing> listings;
+  final void Function(FoodListing listing)? onOpenListing;
+  final TileProvider? tileProvider;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 280,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: RescueColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: RescueColors.border),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.map_outlined, size: 28, color: RescueColors.primary),
-          const SizedBox(height: 10),
+    // Listings with no usable coordinate are left off rather than placed
+    // somewhere plausible. GeoPoint.tryFrom also filters out anything out of
+    // range, which would otherwise throw inside the map and take the whole
+    // screen down over one bad record.
+    final pins = <MapPin>[];
+    for (final listing in listings) {
+      final point = GeoPoint.tryFrom(listing.latitude, listing.longitude);
+      if (point == null) continue;
+      pins.add(
+        MapPin(
+          point: point,
+          // The listing's real backend id, so a tapped pin opens that listing
+          // and no other.
+          id: listing.id,
+          label: listing.title,
+          onTap: () => onOpenListing?.call(listing),
+        ),
+      );
+    }
+
+    final center = origin ?? (pins.isNotEmpty ? pins.first.point : null);
+    if (center == null) {
+      return Container(
+        height: 280,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: RescueColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: RescueColors.border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.map_outlined,
+              size: 28,
+              color: RescueColors.primary,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Map needs your location',
+              style: rescueFont(14, 600, color: RescueColors.ink),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Turn on location to see nearby food on the map.',
+              textAlign: TextAlign.center,
+              style: rescueFont(12.5, 400, color: RescueColors.muted),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FoodLoopMap(
+          center: center,
+          currentLocation: origin,
+          zoom: 14,
+          pins: pins,
+          tileProvider: tileProvider,
+        ),
+        if (pins.length < listings.length) ...[
+          const SizedBox(height: 8),
           Text(
-            'Map view is coming soon',
-            style: rescueFont(14, 600, color: RescueColors.ink),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Switch back to List to browse opportunities.',
-            textAlign: TextAlign.center,
-            style: rescueFont(12.5, 400, color: RescueColors.muted),
+            // Said out loud rather than quietly dropping them: the list and
+            // the map disagreeing is confusing unless the reason is given.
+            '${listings.length - pins.length} of ${listings.length} nearby '
+            'listings have no map location yet.',
+            style: rescueFont(12, 400, color: RescueColors.muted),
           ),
         ],
-      ),
+      ],
     );
   }
 }

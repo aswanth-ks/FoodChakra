@@ -6,6 +6,8 @@ import '../features/auth/domain/account.dart';
 import '../features/auth/domain/account_role.dart';
 import '../features/auth/presentation/auth_providers.dart';
 import '../core/error/failures.dart';
+import '../core/location/location_providers.dart';
+import '../core/location/location_service.dart';
 import '../features/auth/presentation/create_account_screen.dart';
 import '../features/auth/presentation/email_verification_screen.dart';
 import '../features/auth/presentation/forgot_password_screen.dart';
@@ -15,6 +17,7 @@ import '../features/give/domain/surplus_draft.dart';
 import '../features/give/presentation/availability_pickup_screen.dart';
 import '../features/give/presentation/give_entry_screen.dart';
 import '../features/give/presentation/live_matching_screen.dart';
+import '../features/give/presentation/pickup_location_view.dart';
 import '../features/give/presentation/review_publish_screen.dart';
 import '../features/give/presentation/surplus_details_screen.dart';
 import '../features/health/presentation/health_screen.dart';
@@ -28,10 +31,13 @@ import '../features/onboarding/presentation/location_setup_screen.dart';
 import '../features/onboarding/presentation/share_surplus_screen.dart';
 import '../features/onboarding/presentation/welcome_screen.dart';
 import '../features/give/data/surplus_draft_mapper.dart';
+import '../core/diagnostics/perf_trace.dart';
+import '../core/map/geo_point.dart';
 import '../features/rescue/domain/food_listing.dart';
 import '../features/rescue/domain/rescue.dart';
 import '../features/rescue/presentation/listing_providers.dart';
 import '../features/rescue/presentation/active_rescue_view.dart';
+import '../features/rescue/presentation/explore_screen.dart' show ExploreResultView;
 import '../features/rescue/presentation/explore_view.dart';
 import '../features/rescue/presentation/activity_providers.dart';
 import '../features/rescue/presentation/impact_providers.dart';
@@ -40,12 +46,11 @@ import '../features/rescue/presentation/rescue_providers.dart';
 import '../shared/widgets/error_state_view.dart';
 import '../shared/widgets/loader_view.dart';
 import '../features/rescue/presentation/activity_screen.dart';
-import '../features/rescue/presentation/food_details_screen.dart';
+import '../features/rescue/presentation/food_details_view.dart';
 import '../features/rescue/presentation/my_impact_screen.dart';
 import '../features/rescue/presentation/profile_screen.dart';
 import '../features/rescue/presentation/rescue_complete_screen.dart';
 import '../features/rescue/presentation/rescuer_found_screen.dart';
-import '../features/rescue/presentation/widgets/rescue_confirmation_sheet.dart';
 import '../features/splash/presentation/splash_screen.dart';
 import 'session_gate.dart';
 import '../features/rescue/domain/activity_item.dart';
@@ -79,6 +84,13 @@ class AppRoutes {
   // Consumer discovery and rescue
   static const String home = '/home';
   static const String explore = '/explore';
+
+  /// Explore opened on its map view, which is where Home's map card leads.
+  ///
+  /// A query parameter rather than a second route: it is the same screen in
+  /// the same place, and the user can flip the toggle back without the URL
+  /// becoming a lie.
+  static const String exploreMap = '/explore?view=map';
   static const String activity = '/activity';
 
   /// Distinct from [impact], which is the onboarding screen.
@@ -89,6 +101,10 @@ class AppRoutes {
   static const String give = '/give';
   static const String giveDetails = '/give/details';
   static const String givePickup = '/give/pickup';
+
+  /// The map where the pickup point is chosen. Pushed from [givePickup] and
+  /// pops the confirmed point back to it.
+  static const String givePickupMap = '/give/pickup/map';
   static const String giveReview = '/give/review';
 
   /// Where a published surplus lands while it waits for a rescuer.
@@ -178,12 +194,19 @@ Future<void> _authenticateThen(
   Ref ref,
   Future<Account> Function() action, {
   String Function(Account account)? destination,
+  Future<String> Function(Account account)? afterAuth,
 }) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   try {
     final account = await action();
+    // [afterAuth] may divert somewhere else first — the location gate does,
+    // when the device has no usable fix yet. It runs only after the session
+    // exists, so it can never affect whether sign-in itself succeeds.
+    final target = afterAuth == null
+        ? (destination ?? (a) => homeForRole(a.role))(account)
+        : await afterAuth(account);
     if (!context.mounted) return;
-    context.go((destination ?? (a) => homeForRole(a.role))(account));
+    context.go(target);
   } on EmailNotVerifiedFailure catch (failure) {
     // The password was right; the address was never confirmed. Sending the
     // user to the code screen is the only useful thing to do, and no session
@@ -194,6 +217,37 @@ Future<void> _authenticateThen(
   } on Failure catch (failure) {
     messenger?.showSnackBar(SnackBar(content: Text(failure.message)));
   }
+}
+
+/// Decides where a freshly signed-in user goes: straight to [home], or
+/// through location setup first.
+///
+/// A user who already granted permission is never asked again — the fix is
+/// taken silently and stored, which is the whole point of checking before
+/// showing the screen. An inconclusive answer (no plugin channel, an
+/// unsupported platform) is treated as "carry on": it is not evidence that
+/// the user refused anything, and blocking the app on it would strand them.
+Future<String> _locationGate(Ref ref, String home) async {
+  final service = ref.read(locationServiceProvider);
+  final readiness = await service.readiness();
+
+  if (readiness == LocationReadiness.ready) {
+    final result = await service.requestLocation();
+    final position = result.position;
+    if (position != null) {
+      ref.read(deviceLocationProvider.notifier).setFromPosition(position);
+      return home;
+    }
+  }
+
+  if (readiness == LocationReadiness.needsSetup) {
+    return Uri(
+      path: AppRoutes.locationSetup,
+      queryParameters: {'next': home},
+    ).toString();
+  }
+
+  return home;
 }
 
 /// The address of the most recent sign-in attempt.
@@ -213,11 +267,27 @@ String _resetPasswordFor(String email) => Uri(
   queryParameters: {'email': email},
 ).toString();
 
+/// Takes a fresh reading from the device, for "Current location".
+///
+/// Returns null when the platform will not give one — the caller leaves the
+/// pickup point as it was rather than substituting anything.
+Future<GeoPoint?> _deviceLocationPoint(Ref ref) async {
+  final result = await ref.read(locationServiceProvider).requestLocation();
+  final position = result.position;
+  if (!result.isGranted || position == null) return null;
+
+  // Remembered, so the rest of the session shares this one origin.
+  ref.read(deviceLocationProvider.notifier).setFromPosition(position);
+  return GeoPoint.tryFrom(position.latitude, position.longitude);
+}
+
 /// Publishes a Give draft, then opens its live matching screen.
 ///
-/// The pickup point's coordinates come from the device, not the form: the
-/// Give UI collects a place *name* ("Community Hall"), and Explore is a
-/// geospatial query, so a listing with no point is one nobody could ever find.
+/// The pickup point is a real coordinate either way: the one the user
+/// confirmed on the map if they chose one, otherwise the device's own
+/// position, since most people share food from where they are. The Give UI
+/// collects a place *name* ("Community Hall"), and Explore is a geospatial
+/// query, so a listing with no point is one nobody could ever find.
 Future<bool> _publishDraft(
   BuildContext context,
   Ref ref,
@@ -225,13 +295,24 @@ Future<bool> _publishDraft(
 ) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   try {
-    final origin = await ref.read(currentOriginProvider.future);
+    final chosen = GeoPoint.tryFrom(
+      draft.pickupLatitude,
+      draft.pickupLongitude,
+    );
+    final point =
+        chosen ??
+        await () async {
+          final origin = await ref.read(currentOriginProvider.future);
+          return GeoPoint.tryFrom(origin.latitude, origin.longitude);
+        }();
+    if (point == null) throw const LocationUnavailable();
+
     await ref
         .read(listingRepositoryProvider)
         .create(
           draft.toNewListing(
-            latitude: origin.latitude,
-            longitude: origin.longitude,
+            latitude: point.latitude,
+            longitude: point.longitude,
           ),
         );
     // Explore and the owner's own lists must show the new listing.
@@ -244,34 +325,6 @@ Future<bool> _publishDraft(
   }
 }
 
-/// Claims a listing, then opens the Rescuer Found screen for the new rescue.
-///
-/// A refused claim is the normal case, not an error: someone else got there
-/// first. The backend answers 409 and the message it returns is what the user
-/// sees, so the wording stays in one place.
-Future<void> _claimListing(
-  BuildContext context,
-  WidgetRef ref,
-  String listingId,
-) async {
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  try {
-    final rescue = await ref.read(rescueRepositoryProvider).claim(listingId);
-    // The listing has left the pool, so Explore must not keep showing it.
-    ref.invalidate(nearbyListingsProvider);
-    ref.invalidate(myRescuesProvider);
-    if (!context.mounted) return;
-    context.push(AppRoutes.rescuerFoundFor(rescue.id));
-  } on Failure catch (failure) {
-    messenger?.showSnackBar(SnackBar(content: Text(failure.message)));
-  }
-}
-
-
-/// Confirms collection, completing the rescue.
-///
-/// Fails with a clear message until the owner has confirmed the handover —
-
 /// Renders an async provider through the shared loading / error views.
 ///
 /// The screens themselves take plain data, exactly as designed, so connecting
@@ -280,11 +333,21 @@ Widget _asyncView<T>(
   AsyncValue<T> value,
   Widget Function(T value) builder, {
   VoidCallback? onRetry,
+  String? errorTitle,
 }) => value.when(
   loading: () => const LoaderView(),
-  error: (error, _) => ErrorStateView(error: error, onRetry: onRetry),
+  error: (error, _) =>
+      ErrorStateView(error: error, onRetry: onRetry, title: errorTitle),
   data: builder,
 );
+
+/// "FoodLoop member since 2026", or null when the server gave no date.
+///
+/// Nothing is guessed here: an account with no creation date simply has no
+/// membership line on its profile.
+String? _memberSinceLabel(DateTime? createdAt) => createdAt == null
+    ? null
+    : 'FoodLoop member since ${createdAt.toLocal().year}';
 
 /// Partner bottom-nav routing. Only Home has a screen so far; the other four
 /// tabs stay inert until theirs are built.
@@ -366,6 +429,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   // Starts the restore at launch rather than when a screen first happens to
   // read it, so the gate has an answer as early as possible.
+  PerfTrace.mark('router built — session restore starting');
   ref.read(authControllerProvider);
 
   return GoRouter(
@@ -381,7 +445,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         // its animation has finished; `_authRedirect` decides where to go
         // once the session restore has also settled.
         builder: (context, state) => SplashScreen(
-          onComplete: () => ref.read(splashGateProvider.notifier).markComplete(),
+          onComplete: () {
+            PerfTrace.mark('splash animation complete');
+            ref.read(splashGateProvider.notifier).markComplete();
+          },
         ),
       ),
       GoRoute(
@@ -405,18 +472,40 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'impact',
         builder: (context, state) => ImpactScreen(
           onSignIn: () => context.push(AppRoutes.login),
-          onStartRescuing: () => context.push(AppRoutes.locationSetup),
+          // Account creation, not location. Location setup is an
+          // authenticated route now, so a signed-out visitor sent there would
+          // only be redirected to sign-in; the location step is asked for
+          // after login, by the gate, where it belongs.
+          onStartRescuing: () => context.push(AppRoutes.createAccount),
         ),
       ),
       GoRoute(
         path: AppRoutes.locationSetup,
         name: 'locationSetup',
-        builder: (context, state) => LocationSetupScreen(
-          onBack: () => context.canPop() ? context.pop() : null,
-          // Whatever the location outcome, a new user lands on account
-          // creation next — there is no further onboarding screen.
-          onContinue: (_) => context.go(AppRoutes.createAccount),
-        ),
+        builder: (context, state) {
+          // Where to go once this screen is done with. Onboarding sends a new
+          // user on to account creation; the post-login gate passes the home
+          // it wants instead, so one screen serves both without a second
+          // navigation stack.
+          // The gate always supplies one; home is the sane default now that
+          // this route is only reachable with a session.
+          final next = state.uri.queryParameters['next'] ?? AppRoutes.home;
+          return LocationSetupScreen(
+            // The screen's own default would construct a second, separate
+            // LocationService. Passing the provider's keeps one instance for
+            // the whole app — the same one the post-login gate consults — and
+            // is what makes the screen substitutable in a test.
+            locationService: ref.read(locationServiceProvider),
+            onBack: () => context.canPop() ? context.pop() : null,
+            // The real coordinates land in application state here. This is
+            // the only wiring between the screen and the rest of the app —
+            // the screen itself holds no location of its own.
+            onLocationObtained: (position) => ref
+                .read(deviceLocationProvider.notifier)
+                .setFromPosition(position),
+            onContinue: (_) => context.go(next),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.createAccount,
@@ -488,14 +577,34 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.home,
         name: 'home',
+        // The shell is built immediately and never waits. `nearbyListings` is
+        // handed to the screen as a state rather than unwrapped here, so a
+        // slow query holds back its own section and nothing else — this route
+        // used to sit behind one full-page loader until it resolved, and that
+        // query waits on a location fix before it even starts.
         builder: (context, state) => Consumer(
-          builder: (context, ref, _) => _asyncView<List<FoodListing>>(
-            ref.watch(nearbyListingsProvider),
-            (listings) => HomeScreen(
+          builder: (context, ref, _) {
+            final nearby = ref.watch(nearbyListingsProvider);
+            final listings = nearby.value ?? const <FoodListing>[];
+            PerfTrace.mark('Home shell building');
+            final impact = ref.watch(completedRescueCountProvider);
+
+            // The same origin the nearby query used, so the preview's "you"
+            // dot and the distances on the cards cannot disagree.
+            final origin = ref.watch(currentOriginProvider);
+            final originPoint = origin.hasValue
+                ? GeoPoint.tryFrom(
+                    origin.value!.latitude,
+                    origin.value!.longitude,
+                  )
+                : null;
+
+            return HomeScreen(
               // The signed-in account's own name, not a hardcoded one.
-              userName: ref.watch(authControllerProvider).value?.fullName
-                  .split(' ')
-                  .first ??
+              userName:
+                  ref.watch(authControllerProvider).value?.fullName
+                      .split(' ')
+                      .first ??
                   'there',
               // The locality of the nearest listing is the honest answer to
               // "where are you looking?"; the account carries no locality yet.
@@ -503,64 +612,79 @@ final routerProvider = Provider<GoRouter>((ref) {
                   ? 'Near you'
                   : (listings.first.pickupLocality ?? 'Near you'),
               listings: listings,
-              opportunityCount: listings.length,
-              nearestDistanceLabel: listings.isEmpty
-                  ? 'Nothing nearby right now'
-                  : 'Nearest: ${listings.first.distanceLabel}',
-              mealsRescued:
-                  ref.watch(completedRescueCountProvider).value ?? 0,
+              listingsLoading: nearby.isLoading,
+              listingsError: nearby.error,
+              onRetryListings: () => ref.invalidate(nearbyListingsProvider),
+              // Counts stay honest while the query is still out: no total is
+              // claimed until one is known.
+              opportunityCount: nearby.hasValue ? listings.length : 0,
+              nearestDistanceLabel: switch (nearby) {
+                AsyncValue(hasValue: true) when listings.isNotEmpty =>
+                  'Nearest: ${listings.first.distanceLabel}',
+                AsyncValue(hasValue: true) => 'Nothing nearby right now',
+                _ => 'Looking for food near you',
+              },
+              // Null until the count arrives, so the card shows "—" instead
+              // of a 0 it has not verified.
+              mealsRescued: impact.value,
               // Left unknown on purpose — no listing carries a weight.
               foodDivertedKg: null,
-              onOpenListing: (listing) =>
-                  context.push(AppRoutes.foodDetailsFor(listing.id)),
-          // All three routes into discovery land on Explore.
-          onRescueFood: () => context.go(AppRoutes.explore),
-          onExploreNearby: () => context.go(AppRoutes.explore),
-          onSeeAll: () => context.go(AppRoutes.explore),
-          onGiveFood: () => context.push(AppRoutes.give),
-          onViewImpact: () => context.push(AppRoutes.myImpact),
+              // The listing travels with the tap, so Food Details draws at
+              // once rather than re-fetching the card just shown.
+              onOpenListing: (listing) => context.push(
+                AppRoutes.foodDetailsFor(listing.id),
+                extra: listing,
+              ),
+              // All three routes into discovery land on Explore.
+              // Tapping the map preview opens the full map, not the list.
+              onOpenMap: () => context.go(AppRoutes.exploreMap),
+              origin: originPoint,
+              onRescueFood: () => context.go(AppRoutes.explore),
+              onExploreNearby: () => context.go(AppRoutes.explore),
+              onSeeAll: () => context.go(AppRoutes.explore),
+              onGiveFood: () => context.push(AppRoutes.give),
+              onViewImpact: () => context.push(AppRoutes.myImpact),
               onSelectTab: (tab) => onConsumerTab(context, tab),
               // The notification bell stays inert: there is no notification
               // system, and a bell that opens an empty list would imply one.
-            ),
-            onRetry: () => ref.invalidate(nearbyListingsProvider),
-          ),
+            );
+          },
         ),
       ),
       GoRoute(
         path: AppRoutes.explore,
         name: 'explore',
         builder: (context, state) => ExploreView(
-          onOpenListing: (listing) =>
-              context.push(AppRoutes.foodDetailsFor(listing.id)),
+          // Anything other than `map` opens the list, so a malformed or
+          // absent parameter lands on the ordinary screen.
+          initialView: state.uri.queryParameters['view'] == 'map'
+              ? ExploreResultView.map
+              : ExploreResultView.list,
+          // The listing travels with the tap, so Food Details can draw itself
+          // immediately instead of re-fetching what Explore just showed.
+          onOpenListing: (listing) => context.push(
+            AppRoutes.foodDetailsFor(listing.id),
+            extra: listing,
+          ),
           onSelectTab: (tab) => onConsumerTab(context, tab),
         ),
       ),
       GoRoute(
         path: AppRoutes.foodDetails,
         name: 'foodDetails',
-        builder: (context, state) {
-          final id = listingId(state);
-          return Consumer(
-            builder: (context, ref, _) => _asyncView<FoodListing>(
-              ref.watch(listingDetailProvider(id)),
-              (listing) => FoodDetailsScreen(
-                listing: listing,
-                onBack: () => context.canPop() ? context.pop() : null,
-                onRescue: () async {
-                  final confirmed = await showRescueConfirmationSheet(
-                    context,
-                    listing: listing,
-                  );
-                  if (!(confirmed ?? false)) return;
-                  if (!context.mounted) return;
-                  await _claimListing(context, ref, listing.id);
-                },
-              ),
-              onRetry: () => ref.invalidate(listingDetailProvider(id)),
-            ),
-          );
-        },
+        builder: (context, state) => FoodDetailsView(
+          listingId: listingId(state),
+          // Present when the user tapped a card; absent on a deep link, where
+          // the screen genuinely has nothing to show until the server answers.
+          initial: state.extra is FoodListing
+              ? state.extra! as FoodListing
+              : null,
+          onBack: () => context.canPop() ? context.pop() : null,
+          // The id here is the one the server returned for the rescue it
+          // created. Nothing local invents it.
+          onClaimed: (rescueId) =>
+              context.push(AppRoutes.rescuerFoundFor(rescueId)),
+        ),
       ),
       GoRoute(
         path: AppRoutes.give,
@@ -590,7 +714,24 @@ final routerProvider = Provider<GoRouter>((ref) {
           onBack: () => context.canPop() ? context.pop() : null,
           onContinue: (draft) =>
               context.push(AppRoutes.giveReview, extra: draft),
-          // Choosing a different pickup point needs the Phase 8 map.
+          // The map pops the confirmed point back here, so the draft carries
+          // the coordinate onward to Review and then to the API.
+          onChooseOnMap: (current) =>
+              context.push<GeoPoint>(AppRoutes.givePickupMap, extra: current),
+          onUseCurrentLocation: () => _deviceLocationPoint(ref),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.givePickupMap,
+        name: 'givePickupMap',
+        builder: (context, state) => PickupLocationView(
+          initialSelection: state.extra is GeoPoint
+              ? state.extra! as GeoPoint
+              : null,
+          onBack: () => context.canPop() ? context.pop() : null,
+          // Only a confirmed point leaves this screen. Backing out pops
+          // nothing, so panning the map changes no listing.
+          onConfirm: (point) => context.pop(point),
         ),
       ),
       GoRoute(
@@ -625,16 +766,55 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.profile,
         name: 'profile',
-        builder: (context, state) => ProfileScreen(
-          onBack: context.canPop() ? () => context.pop() : null,
-          onSelectTab: (tab) => onConsumerTab(context, tab),
-          // Signing out clears the stored tokens; the router's redirect is
-          // what moves the user, so there is no authenticated screen left
-          // behind on the stack to pop back to.
-          onSignOut: () =>
-              ref.read(authControllerProvider.notifier).signOut(),
-          // Every settings row needs a screen that does not exist yet, so
-          // they stay inert rather than pointing at placeholders.
+        // Identity comes from the session, which is already in hand by the
+        // time this route can be reached — so it is drawn at once. The counts
+        // are two further requests and load on their own: Profile used to sit
+        // behind a single spinner until they finished, hiding a name and
+        // email it already had.
+        builder: (context, state) => Consumer(
+          builder: (context, ref, _) {
+            final account = ref.watch(authControllerProvider).value;
+            // The route is protected, so the redirect has already sent an
+            // unauthenticated visitor to sign-in; this only covers the frame
+            // in which a sign-out is still settling.
+            if (account == null) return const LoaderView();
+
+            final impact = ref.watch(consumerImpactProvider);
+            final summary = impact.value?.summary;
+
+            return ProfileScreen(
+              name: account.fullName,
+              email: account.email,
+              role: account.role,
+              emailVerified: account.emailVerified,
+              memberSinceLabel: _memberSinceLabel(account.createdAt),
+              // Real completed counts, or null until they arrive. A new
+              // account sees 0 and 0, which is the true answer; a pending one
+              // sees a dash, because 0 would not be.
+              mealBoxesRescued: summary?.mealBoxes,
+              foodShares: summary?.shares,
+              statsError: impact.error,
+              // The counts are derived from these two, and a failed provider
+              // caches its error: invalidating only the derived one would
+              // recompute from the same cached failure and never reach the
+              // network. Both sources are dropped so Try again really
+              // retries.
+              onRetryStats: () {
+                ref.invalidate(myRescuesProvider);
+                ref.invalidate(myListingsProvider);
+                ref.invalidate(consumerImpactProvider);
+              },
+              onBack: context.canPop() ? () => context.pop() : null,
+              onSelectTab: (tab) => onConsumerTab(context, tab),
+              // Signing out clears the stored tokens; the router's redirect
+              // is what moves the user, so there is no authenticated screen
+              // left behind on the stack to pop back to.
+              onSignOut: () =>
+                  ref.read(authControllerProvider.notifier).signOut(),
+              // Every settings row needs a screen that does not exist yet, so
+              // they stay inert rather than pointing at placeholders.
+            );
+          },
         ),
       ),
       GoRoute(
@@ -832,6 +1012,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               () => ref
                   .read(authControllerProvider.notifier)
                   .signIn(email: email, password: password),
+              destination: (account) => homeForRole(account.role),
+              afterAuth: (account) => _locationGate(ref, homeForRole(account.role)),
             );
           },
         ),

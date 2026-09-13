@@ -10,10 +10,19 @@ import '../../core/error/failures.dart';
 /// shown, otherwise a safe generic message is used. Raw exception text is
 /// never displayed to a user.
 class ErrorStateView extends StatelessWidget {
-  const ErrorStateView({super.key, required this.error, this.onRetry});
+  const ErrorStateView({
+    super.key,
+    required this.error,
+    this.onRetry,
+    this.title,
+  });
 
   final Object error;
   final VoidCallback? onRetry;
+
+  /// Replaces the generic heading when a screen can say something more
+  /// specific about what failed to load.
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +38,7 @@ class ErrorStateView extends StatelessWidget {
             Icon(_iconFor(failure), size: 56, color: AppColors.error),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              'Something went wrong',
+              title ?? 'Something went wrong',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),

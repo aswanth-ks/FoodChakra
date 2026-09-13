@@ -8,6 +8,11 @@ import 'package:foodloop/features/rescue/domain/rescue_repository.dart';
 import 'package:foodloop/features/rescue/presentation/active_rescue_view.dart';
 import 'package:foodloop/features/rescue/presentation/handover_confirmation_view.dart';
 import 'package:foodloop/features/rescue/presentation/rescue_providers.dart';
+import 'package:foodloop/core/location/location_cache.dart';
+import 'package:foodloop/core/location/location_providers.dart';
+
+import 'support/fake_location_cache.dart';
+import 'support/inert_location_service.dart';
 
 const _listing = FoodListing(
   id: 'l1',
@@ -116,7 +121,14 @@ class FakeRescueRepository implements RescueRepository {
 
 Widget harness(FakeRescueRepository repository, Widget child) {
   return ProviderScope(
-    overrides: [rescueRepositoryProvider.overrideWithValue(repository)],
+    overrides: [
+        // Nothing remembered from a previous launch, and no platform channel
+        // to hang on. Tests that want a remembered fix seed it themselves.
+        locationCacheProvider.overrideWithValue(FakeLocationCache()),
+        // No platform channel for these tests to hang on either.
+        locationServiceProvider.overrideWithValue(
+          const InertLocationService(),
+        ),rescueRepositoryProvider.overrideWithValue(repository)],
     child: MaterialApp(home: child),
   );
 }

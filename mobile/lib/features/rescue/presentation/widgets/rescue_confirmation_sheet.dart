@@ -40,21 +40,17 @@ enum _ConfirmState { idle, reserving, confirmed }
 
 class _RescueConfirmationSheetState extends State<_RescueConfirmationSheet> {
   bool _committed = false;
-  _ConfirmState _state = _ConfirmState.idle;
+  final _ConfirmState _state = _ConfirmState.idle;
 
-  Future<void> _confirm() async {
+  /// Closes the sheet with the user's decision. It does **not** reserve
+  /// anything.
+  ///
+  /// This used to sit through two timed delays and show "Rescue confirmed"
+  /// before any request had been made — a success state the server had not
+  /// agreed to, on a claim that can legitimately lose a race. The real claim
+  /// and its progress belong to the details screen, which owns the outcome.
+  void _confirm() {
     if (!_committed || _state != _ConfirmState.idle) return;
-
-    setState(() => _state = _ConfirmState.reserving);
-    // PHASE 5: replace with the reservation call. The delay stands in for it
-    // so the design's three button states are all reachable.
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
-
-    setState(() => _state = _ConfirmState.confirmed);
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
-
     Navigator.of(context).pop(true);
   }
 
@@ -145,11 +141,9 @@ class _RescueConfirmationSheetState extends State<_RescueConfirmationSheet> {
                 ),
                 const SizedBox(height: 16),
                 RescuePrimaryButton(
-                  label: switch (_state) {
-                    _ConfirmState.idle => 'Confirm rescue',
-                    _ConfirmState.reserving => 'Reserving…',
-                    _ConfirmState.confirmed => 'Rescue confirmed',
-                  },
+                  // One label only: nothing here can report a rescue as
+                  // confirmed, because nothing here has asked the server.
+                  label: 'Confirm rescue',
                   icon: confirmed
                       ? Icons.check_rounded
                       : (reserving ? null : Icons.shopping_bag_outlined),

@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/token_storage.dart';
 import '../config/env.dart';
+import '../diagnostics/perf_trace.dart';
 import 'auth_interceptor.dart';
+import 'cold_start_interceptor.dart';
 import 'error_interceptor.dart';
 import 'redacting_log_interceptor.dart';
 
@@ -19,6 +21,7 @@ final dioProvider = Provider<Dio>((ref) {
       baseUrl: Env.apiUrl,
       connectTimeout: Env.connectTimeout,
       receiveTimeout: Env.receiveTimeout,
+      sendTimeout: Env.sendTimeout,
       headers: {'Content-Type': 'application/json'},
       // Let the error interceptor classify every non-2xx response.
       validateStatus: (status) => status != null && status >= 200 && status < 300,
@@ -29,7 +32,15 @@ final dioProvider = Provider<Dio>((ref) {
   // interceptor converts it into a Failure and rejects the chain.
   final auth = AuthInterceptor(ref.watch(tokenStorageProvider))..attach(dio);
   dio.interceptors.add(auth);
+  // Before the error interceptor, so a cold-start timeout is retried while it
+  // is still a DioException rather than after it has become a Failure the
+  // screens would already be showing.
+  dio.interceptors.add(ColdStartInterceptor(dio));
   dio.interceptors.add(ErrorInterceptor());
+
+  // Last in the chain, so the duration it reports is the whole round trip as
+  // the caller experiences it. Compiled out unless PERF_TRACE was defined.
+  if (Env.perfTrace) dio.interceptors.add(PerfTraceInterceptor());
 
   if (Env.enableNetworkLogs && kDebugMode) {
     // Not Dio's `LogInterceptor`: with `requestBody`/`responseBody` on it

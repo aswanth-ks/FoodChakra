@@ -15,8 +15,14 @@ import 'rescue_providers.dart';
 final activeActivityProvider = FutureProvider.autoDispose<List<ActivityItem>>((
   ref,
 ) async {
-  final rescues = await ref.watch(myRescuesProvider.future);
-  final listings = await ref.watch(myListingsProvider.future);
+  // Concurrently: two independent endpoints, so the screen waits for the
+  // slower of the two rather than for both in turn.
+  final results = await Future.wait([
+    ref.watch(myRescuesProvider.future),
+    ref.watch(myListingsProvider.future),
+  ]);
+  final rescues = results[0] as List<Rescue>;
+  final listings = results[1] as List<FoodListing>;
 
   return [
     // Food I am collecting.
@@ -37,8 +43,12 @@ bool _isInFlight(FoodListing listing) => switch (listing.status) {
 /// The Activity screen's "History" tab: rescues and shares that finished.
 final activityHistoryProvider =
     FutureProvider.autoDispose<List<ActivityHistoryEntry>>((ref) async {
-      final rescues = await ref.watch(myRescuesProvider.future);
-      final listings = await ref.watch(myListingsProvider.future);
+      final results = await Future.wait([
+        ref.watch(myRescuesProvider.future),
+        ref.watch(myListingsProvider.future),
+      ]);
+      final rescues = results[0] as List<Rescue>;
+      final listings = results[1] as List<FoodListing>;
 
       return [
         for (final rescue in rescues.where((r) => r.status == 'completed'))

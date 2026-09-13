@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/food_listing.dart';
 import '../domain/impact_summary.dart';
+import '../domain/rescue.dart';
 import 'listing_providers.dart';
 import 'rescue_providers.dart';
 
@@ -28,8 +29,15 @@ class ConsumerImpact {
 final consumerImpactProvider = FutureProvider.autoDispose<ConsumerImpact>((
   ref,
 ) async {
-  final rescues = await ref.watch(myRescuesProvider.future);
-  final listings = await ref.watch(myListingsProvider.future);
+  // Concurrently: these two read different endpoints and neither needs the
+  // other's answer. Awaiting them in turn cost the sum of two round trips
+  // (~2s against the deployed API) for a screen that could have paid one.
+  final results = await Future.wait([
+    ref.watch(myRescuesProvider.future),
+    ref.watch(myListingsProvider.future),
+  ]);
+  final rescues = results[0] as List<Rescue>;
+  final listings = results[1] as List<FoodListing>;
 
   final completedRescues = rescues
       .where((r) => r.status == 'completed')

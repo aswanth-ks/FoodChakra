@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/cache/cache_for.dart';
 import '../../../core/network/dio_client.dart';
 import '../data/rescue_repository_impl.dart';
 import '../domain/rescue.dart';
@@ -27,5 +28,8 @@ final rescueForListingProvider = FutureProvider.autoDispose
 
 /// The signed-in consumer's rescues. Backs the Activity screen.
 final myRescuesProvider = FutureProvider.autoDispose<List<Rescue>>((ref) {
+  // Read by Activity, Impact, Profile and Home's rescue count. Without a
+  // grace window, moving between them refetches the same list each time.
+  cacheFor(ref, const Duration(seconds: 45));
   return ref.watch(rescueRepositoryProvider).mine();
 });

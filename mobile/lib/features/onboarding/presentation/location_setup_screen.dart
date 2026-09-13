@@ -1,34 +1,50 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+
+import 'package:flutter_map/flutter_map.dart' show TileProvider;
 
 import '../../../app/theme/app_typography.dart';
 import '../../../core/location/location_service.dart';
+import '../../../core/map/foodloop_map.dart';
+import '../../../core/map/geo_point.dart';
 
 /// "FoodLoop Location Setup Screen".
 ///
 /// Faithful translation of the Stitch design
 /// (screen `cce80807fdbe43e28fe84d970260b8f4`).
 ///
-/// "Enable location" triggers the real Android/iOS permission prompt through
-/// [LocationService] — set the emulator's location under Extended Controls ->
-/// Location to see a real coordinate returned. Whatever the outcome (granted,
-/// denied, or the plugin being unavailable, e.g. in a test), [onContinue]
-/// still fires so the user is never stranded on this screen; only the
-/// snackbar shown differs.
+/// "Enable location" runs the real Android/iOS permission flow through
+/// [LocationService]. Only a genuine fix moves the user on: every failure
+/// keeps them here with the reason and a way to act on it, because continuing
+/// as though location were available would leave the app hunting for nearby
+/// food it has no coordinates for.
 class LocationSetupScreen extends StatefulWidget {
   const LocationSetupScreen({
     super.key,
     this.onBack,
     this.onContinue,
+    this.onLocationObtained,
     this.locationService = const LocationService(),
+    this.tileProvider,
   });
 
   final VoidCallback? onBack;
 
-  /// Called once the user has moved past this screen, by any of the three
-  /// exits (Skip, Not now, or a resolved Enable-location attempt).
+  /// Called when the user leaves this screen: with [LocationOutcome.granted]
+  /// after a real fix, or with [LocationOutcome.denied] when they dismiss the
+  /// screen themselves via Skip or "Not now".
+  ///
+  /// A failed attempt does **not** call this. The user stays put with a retry.
   final void Function(LocationOutcome outcome)? onContinue;
 
+  /// Receives the real position, before [onContinue] fires, so the coordinates
+  /// reach application state rather than being shown once and discarded.
+  final void Function(Position position)? onLocationObtained;
+
   final LocationService locationService;
+
+  /// Overridden in tests so the map never reaches for a tile.
+  final TileProvider? tileProvider;
 
   @override
   State<LocationSetupScreen> createState() => _LocationSetupScreenState();
@@ -39,6 +55,15 @@ class _LocationSetupScreenState extends State<LocationSetupScreen>
   late final AnimationController _radar;
   bool _requesting = false;
 
+  /// The last unsuccessful outcome, or null when nothing has failed yet.
+  /// Drives the in-screen explanation and the action offered with it.
+  LocationOutcome? _issue;
+
+  /// The real fix, once one has been taken. Null until then — and the map is
+  /// not drawn until then either, because drawing one would mean choosing a
+  /// centre, and the only honest centre is where the user actually is.
+  GeoPoint? _fix;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +71,19 @@ class _LocationSetupScreenState extends State<LocationSetupScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2200),
     );
+    _continueIfAlreadyGranted();
+  }
+
+  /// A user who granted permission on an earlier run should not be asked
+  /// again. If a fix can be taken without prompting, this screen takes it and
+  /// gets out of the way.
+  Future<void> _continueIfAlreadyGranted() async {
+    final readiness = await widget.locationService.readiness();
+    if (!mounted || readiness != LocationReadiness.ready) return;
+
+    final result = await widget.locationService.requestLocation();
+    if (!mounted || !result.isGranted) return;
+    _accept(result, silent: true);
   }
 
   @override
@@ -64,33 +102,112 @@ class _LocationSetupScreenState extends State<LocationSetupScreen>
   }
 
   Future<void> _enableLocation() async {
+    setState(() {
+      _requesting = true;
+      _issue = null;
+    });
+    final result = await widget.locationService.requestLocation();
+    if (!mounted) return;
+    setState(() => _requesting = false);
+
+    if (result.isGranted) {
+      _accept(result);
+      return;
+    }
+
+    // Nothing is reported as enabled here, and no placeholder coordinate is
+    // invented: the user stays on this screen until a real fix arrives.
+    setState(() => _issue = result.outcome);
+  }
+
+  /// Records the real coordinates and shows them on the map.
+  ///
+  /// [silent] is the returning-user path: permission was granted on an earlier
+  /// run, so the fix is taken without a prompt and the screen gets out of the
+  /// way rather than making the user confirm the same thing twice. Only a
+  /// fresh grant stops to show the map.
+  void _accept(LocationResult result, {bool silent = false}) {
+    final position = result.position;
+    if (position != null) {
+      // Handed over immediately, so the coordinates are application state from
+      // the moment they exist rather than something this screen is holding.
+      widget.onLocationObtained?.call(position);
+    }
+
+    if (silent || position == null) {
+      widget.onContinue?.call(LocationOutcome.granted);
+      return;
+    }
+
+    final point = GeoPoint.tryFrom(position.latitude, position.longitude);
+    if (point == null) {
+      // The platform gave a coordinate no map can place. Nothing is invented
+      // to cover for it: the user is told, and can try again.
+      setState(() => _issue = LocationOutcome.unavailable);
+      return;
+    }
+    setState(() => _fix = point);
+  }
+
+  /// What went wrong, in the user's terms.
+  static String _issueMessage(LocationOutcome outcome) => switch (outcome) {
+    LocationOutcome.denied =>
+      'FoodLoop needs your location to find surplus food near you.',
+    LocationOutcome.deniedForever =>
+      'Location is blocked for FoodLoop. Grant it in Settings to find '
+          'surplus food near you.',
+    LocationOutcome.serviceDisabled => 'Turn on Location to continue.',
+    LocationOutcome.timedOut =>
+      "Couldn't get your location. GPS can be slow indoors — try again, or "
+          'step near a window.',
+    LocationOutcome.unavailable =>
+      'Could not get your location. Please try again.',
+    LocationOutcome.granted => '',
+  };
+
+  /// The label of the action offered alongside the message, or null when a
+  /// plain retry is all that is useful.
+  static String? _issueActionLabel(LocationOutcome outcome) =>
+      switch (outcome) {
+        LocationOutcome.deniedForever => 'Open settings',
+        LocationOutcome.serviceDisabled => 'Open location settings',
+        _ => null,
+      };
+
+  Future<void> _runIssueAction(LocationOutcome outcome) async {
+    // Neither of these can grant anything by itself — Android alone decides —
+    // so the screen stays put and the user retries after coming back.
+    switch (outcome) {
+      case LocationOutcome.deniedForever:
+        await widget.locationService.openAppSettings();
+      case LocationOutcome.serviceDisabled:
+        await widget.locationService.openLocationSettings();
+      default:
+        break;
+    }
+  }
+
+  /// Re-reads the device position from the map's "use my location" button.
+  Future<void> _recenter() async {
     setState(() => _requesting = true);
     final result = await widget.locationService.requestLocation();
     if (!mounted) return;
     setState(() => _requesting = false);
 
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(SnackBar(content: Text(_messageFor(result))));
-    widget.onContinue?.call(result.outcome);
+    final position = result.position;
+    if (!result.isGranted || position == null) {
+      setState(() => _issue = result.outcome);
+      return;
+    }
+    widget.onLocationObtained?.call(position);
+    final point = GeoPoint.tryFrom(position.latitude, position.longitude);
+    if (point != null) setState(() => _fix = point);
   }
-
-  String _messageFor(LocationResult result) => switch (result.outcome) {
-    LocationOutcome.granted =>
-      result.position != null
-          ? 'Location enabled '
-                '(${result.position!.latitude.toStringAsFixed(4)}, '
-                '${result.position!.longitude.toStringAsFixed(4)}).'
-          : 'Location enabled.',
-    LocationOutcome.denied => 'Location permission was not granted.',
-    LocationOutcome.deniedForever =>
-      'Location is blocked. You can enable it later in system settings.',
-    LocationOutcome.serviceDisabled =>
-      'Turn on device location to use this feature.',
-    LocationOutcome.unavailable => 'Could not get your location right now.',
-  };
 
   @override
   Widget build(BuildContext context) {
+    final issue = _issue;
+    final fix = _fix;
     return Scaffold(
       backgroundColor: LocationColors.surface,
       body: SafeArea(
@@ -113,7 +230,29 @@ class _LocationSetupScreenState extends State<LocationSetupScreen>
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const SizedBox(height: 12),
-                          _MapCard(radar: _radar),
+                          // Before a fix there is nothing real to centre a map
+                          // on, so the design's illustration stands in. The
+                          // moment a real position exists it is replaced by
+                          // the real map at that position.
+                          if (fix == null)
+                            _MapCard(radar: _radar)
+                          else
+                            FoodLoopMap(
+                              center: fix,
+                              currentLocation: fix,
+                              zoom: 16,
+                              height: 250,
+                              onRecenter: _recenter,
+                              recentering: _requesting,
+                              tileProvider: widget.tileProvider,
+                            ),
+                          if (fix != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Location set ($fix).',
+                              style: _font(12, 500, LocationColors.inkMuted),
+                            ),
+                          ],
                           const SizedBox(height: 28),
                           const _TextBlock(),
                           const SizedBox(height: 16),
@@ -121,10 +260,28 @@ class _LocationSetupScreenState extends State<LocationSetupScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  if (issue != null) ...[
+                    _IssueNotice(
+                      message: _issueMessage(issue),
+                      actionLabel: _issueActionLabel(issue),
+                      onAction: () => _runIssueAction(issue),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   _EnableLocationButton(
-                    loading: _requesting,
-                    onPressed: _requesting ? null : _enableLocation,
+                    loading: _requesting && fix == null,
+                    label: switch ((fix, issue)) {
+                      (_?, _) => 'Continue',
+                      (_, null) => 'Enable location',
+                      _ => 'Try again',
+                    },
+                    onPressed: _requesting
+                        ? null
+                        : (fix != null
+                              ? () => widget.onContinue?.call(
+                                  LocationOutcome.granted,
+                                )
+                              : _enableLocation),
                   ),
                   const SizedBox(height: 4),
                   TextButton(
@@ -148,6 +305,74 @@ class _LocationSetupScreenState extends State<LocationSetupScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Explains a failed attempt and offers the one action that can resolve it.
+class _IssueNotice extends StatelessWidget {
+  const _IssueNotice({required this.message, this.actionLabel, this.onAction});
+
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = actionLabel;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: LocationColors.brandLight,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: LocationColors.brandSage),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.location_off_outlined,
+                size: 16,
+                color: LocationColors.brand.withValues(alpha: 0.8),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  style: _font(
+                    13,
+                    500,
+                    LocationColors.inkSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (label != null) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: onAction,
+                style: TextButton.styleFrom(
+                  foregroundColor: LocationColors.brand,
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(label, style: _font(13, 600, LocationColors.brand)),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -661,10 +886,17 @@ class _TextBlock extends StatelessWidget {
 }
 
 class _EnableLocationButton extends StatelessWidget {
-  const _EnableLocationButton({this.onPressed, this.loading = false});
+  const _EnableLocationButton({
+    this.onPressed,
+    this.loading = false,
+    this.label = 'Enable location',
+  });
 
   final VoidCallback? onPressed;
   final bool loading;
+
+  /// Becomes "Try again" once an attempt has failed.
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -713,7 +945,7 @@ class _EnableLocationButton extends StatelessWidget {
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        'Enable location',
+                        label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: _font(15.5, 600, Colors.white),

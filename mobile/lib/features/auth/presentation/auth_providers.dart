@@ -6,6 +6,8 @@ import '../data/auth_repository_impl.dart';
 import '../domain/account.dart';
 import '../domain/auth_repository.dart';
 
+import '../../../core/diagnostics/perf_trace.dart';
+
 /// Binds the repository interface to its implementation.
 ///
 /// Tests override this with a fake, which is why the presentation layer only
@@ -24,7 +26,10 @@ final authRepositoryProvider = Provider<AuthRepository>(
 /// `AccountRole` for why that was removed.
 class AuthController extends AsyncNotifier<Account?> {
   @override
-  Future<Account?> build() => ref.watch(authRepositoryProvider).restoreSession();
+  Future<Account?> build() => PerfTrace.span(
+    'restoreSession (/auth/me)',
+    () => ref.watch(authRepositoryProvider).restoreSession(),
+  );
 
   AuthRepository get _repository => ref.read(authRepositoryProvider);
 

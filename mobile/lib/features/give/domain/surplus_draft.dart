@@ -86,6 +86,8 @@ class SurplusDraft {
     this.pickupUntil = const TimeOfDay(hour: 20, minute: 30),
     this.pickupLocation = 'Community Hall',
     this.pickupDistanceKm = 1.2,
+    this.pickupLatitude,
+    this.pickupLongitude,
   });
 
   final SurplusSource? source;
@@ -111,6 +113,18 @@ class SurplusDraft {
   final String pickupLocation;
   final double pickupDistanceKm;
 
+  /// The confirmed pickup point, once the user has chosen one on the map.
+  ///
+  /// Null means "not chosen yet", and stays null — publishing falls back to
+  /// the device's own position, which is also a real reading. Neither path
+  /// invents a coordinate, and a listing is never published without one.
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+
+  /// Whether a point was picked deliberately rather than inherited.
+  bool get hasPickupPoint =>
+      pickupLatitude != null && pickupLongitude != null;
+
   SurplusDraft copyWith({
     SurplusSource? source,
     String? foodName,
@@ -126,6 +140,8 @@ class SurplusDraft {
     TimeOfDay? pickupUntil,
     String? pickupLocation,
     double? pickupDistanceKm,
+    double? pickupLatitude,
+    double? pickupLongitude,
   }) => SurplusDraft(
     source: source ?? this.source,
     foodName: foodName ?? this.foodName,
@@ -141,6 +157,8 @@ class SurplusDraft {
     pickupUntil: pickupUntil ?? this.pickupUntil,
     pickupLocation: pickupLocation ?? this.pickupLocation,
     pickupDistanceKm: pickupDistanceKm ?? this.pickupDistanceKm,
+    pickupLatitude: pickupLatitude ?? this.pickupLatitude,
+    pickupLongitude: pickupLongitude ?? this.pickupLongitude,
   );
 
   /// Step 1 is answerable once the food is named, counted, categorised and

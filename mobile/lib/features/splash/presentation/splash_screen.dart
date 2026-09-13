@@ -45,7 +45,12 @@ class _SplashScreenState extends State<SplashScreen>
   static const Curve _easing = Cubic(0.16, 1, 0.3, 1);
 
   /// How long the finished composition rests before advancing.
-  static const Duration _hold = Duration(milliseconds: 600);
+  ///
+  /// Was 600ms, which on a real device was dead time: the session restore
+  /// finished at ~0.94s and the app then sat on the splash until 1.68s
+  /// purely because the timer said so. The composition still lands and is
+  /// legible — this trims the pause after it, not the animation itself.
+  static const Duration _hold = Duration(milliseconds: 180);
 
   late final AnimationController _controller;
 

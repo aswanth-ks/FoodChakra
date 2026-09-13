@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter_map/flutter_map.dart' show TileProvider;
+
+import '../../../core/error/failures.dart';
+import '../../../core/map/foodloop_map.dart';
+import '../../../core/map/geo_point.dart';
 import '../../../shared/widgets/consumer_nav_bar.dart';
 import '../../rescue/domain/food_listing.dart';
 import '../../rescue/presentation/widgets/rescue_widgets.dart';
@@ -21,11 +26,17 @@ class HomeScreen extends StatelessWidget {
     this.opportunityCount = 12,
     this.nearestDistanceLabel = 'Nearest: 650m away',
     this.listings = const [],
-    this.mealsRescued = 0,
+    this.listingsLoading = false,
+    this.listingsError,
+    this.onRetryListings,
+    this.mealsRescued,
     this.foodDivertedKg,
     this.onChangeLocation,
     this.onNotifications,
     this.onExploreNearby,
+    this.onOpenMap,
+    this.origin,
+    this.tileProvider,
     this.onRescueFood,
     this.onGiveFood,
     this.onSeeAll,
@@ -39,7 +50,27 @@ class HomeScreen extends StatelessWidget {
   final int opportunityCount;
   final String nearestDistanceLabel;
   final List<FoodListing> listings;
-  final int mealsRescued;
+
+  /// Whether the nearby query is still in flight.
+  ///
+  /// The section shows a skeleton while this is true. The rest of the page is
+  /// drawn regardless: Home used to sit behind one full-screen spinner until
+  /// the listings resolved, which meant a slow query — or a GPS fix that took
+  /// its time — held back the greeting, the two action cards and the impact
+  /// card, none of which depend on it.
+  final bool listingsLoading;
+
+  /// Non-null when the nearby query failed. The section reports it and offers
+  /// [onRetryListings]; the page around it still renders.
+  final Object? listingsError;
+
+  final VoidCallback? onRetryListings;
+
+  /// Completed rescues, or null while that count is still loading.
+  ///
+  /// Nullable on purpose: rendering 0 before the answer arrives states
+  /// something false to anyone who has rescued food.
+  final int? mealsRescued;
 
   /// Kilograms diverted, or null when it cannot be known.
   ///
@@ -52,6 +83,22 @@ class HomeScreen extends StatelessWidget {
   final VoidCallback? onChangeLocation;
   final VoidCallback? onNotifications;
   final VoidCallback? onExploreNearby;
+
+  /// Opens Explore already switched to its map view.
+  ///
+  /// The preview on this card is deliberately not pannable: at 126px there is
+  /// nothing useful to pan to, and a map that half-works under the thumb is
+  /// worse than one that is plainly a door to the full one.
+  final VoidCallback? onOpenMap;
+
+  /// The device's position, which the preview centres on. Null until a real
+  /// fix exists — the card then keeps the stylised illustration rather than
+  /// opening a real map on a guessed location.
+  final GeoPoint? origin;
+
+  /// Overridden in tests so no tile is fetched.
+  final TileProvider? tileProvider;
+
   final VoidCallback? onRescueFood;
   final VoidCallback? onGiveFood;
   final VoidCallback? onSeeAll;
@@ -98,6 +145,10 @@ class HomeScreen extends StatelessWidget {
                         opportunityCount: opportunityCount,
                         nearestDistanceLabel: nearestDistanceLabel,
                         onExploreNearby: onExploreNearby,
+                        onOpenMap: onOpenMap,
+                        origin: origin,
+                        listings: listings,
+                        tileProvider: tileProvider,
                       ),
                       const SizedBox(height: 24),
                       Text(
@@ -141,17 +192,27 @@ class HomeScreen extends StatelessWidget {
                         onAction: onSeeAll,
                       ),
                       const SizedBox(height: 12),
-                      // Indexed rather than `listing != listings.last`:
-                      // identical const listings canonicalise to one instance,
-                      // so equality is not a safe position test.
-                      for (var i = 0; i < listings.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 12),
-                        ListingCard(
-                          listing: listings[i],
-                          onTap: () => onOpenListing?.call(listings[i]),
-                          onRescue: () => onOpenListing?.call(listings[i]),
-                        ),
-                      ],
+                      if (listingsLoading)
+                        const _ListingsSkeleton()
+                      else if (listingsError != null)
+                        _SectionError(
+                          error: listingsError!,
+                          onRetry: onRetryListings,
+                        )
+                      else if (listings.isEmpty)
+                        const _NoListingsNearby()
+                      else
+                        // Indexed rather than `listing != listings.last`:
+                        // identical const listings canonicalise to one
+                        // instance, so equality is not a safe position test.
+                        for (var i = 0; i < listings.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 12),
+                          ListingCard(
+                            listing: listings[i],
+                            onTap: () => onOpenListing?.call(listings[i]),
+                            onRescue: () => onOpenListing?.call(listings[i]),
+                          ),
+                        ],
                       const SizedBox(height: 24),
                       _ImpactPreview(
                         mealsRescued: mealsRescued,
@@ -165,6 +226,121 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Placeholder cards while the nearby query runs.
+///
+/// Deliberately shapes only — no titles, distances or counts. A skeleton that
+/// showed plausible text would be indistinguishable from real surplus food
+/// that is not actually there.
+class _ListingsSkeleton extends StatelessWidget {
+  const _ListingsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var i = 0; i < 2; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          Semantics(
+            label: 'Loading nearby food',
+            child: Container(
+              height: 104,
+              decoration: BoxDecoration(
+                color: RescueColors.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE9EDEA)),
+              ),
+              child: const Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Zero listings is an answer, not a failure, and not a reason to keep
+/// spinning.
+class _NoListingsNearby extends StatelessWidget {
+  const _NoListingsNearby();
+
+  @override
+  Widget build(BuildContext context) {
+    return RescueCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Nothing to rescue right now',
+            style: rescueFont(15, 700, color: RescueColors.ink),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'No surplus food is available nearby yet. Check back a little '
+            'later.',
+            style: rescueFont(13, 400, color: RescueColors.muted, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One section failing must not take the page with it.
+class _SectionError extends StatelessWidget {
+  const _SectionError({required this.error, this.onRetry});
+
+  final Object error;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final failure = error is Failure ? error as Failure : null;
+    return RescueCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Couldn't load nearby food",
+            style: rescueFont(15, 700, color: RescueColors.ink),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            // The server's own wording where there is one; never raw
+            // exception text.
+            failure?.message ?? 'Please try again.',
+            style: rescueFont(13, 400, color: RescueColors.muted, height: 1.4),
+          ),
+          if (onRetry != null) ...[
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(
+                foregroundColor: RescueColors.primary,
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 6,
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Try again',
+                style: rescueFont(13, 600, color: RescueColors.primary),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -264,11 +440,19 @@ class _LiveHeroCard extends StatelessWidget {
     required this.opportunityCount,
     required this.nearestDistanceLabel,
     this.onExploreNearby,
+    this.onOpenMap,
+    this.origin,
+    this.listings = const [],
+    this.tileProvider,
   });
 
   final int opportunityCount;
   final String nearestDistanceLabel;
   final VoidCallback? onExploreNearby;
+  final VoidCallback? onOpenMap;
+  final GeoPoint? origin;
+  final List<FoodListing> listings;
+  final TileProvider? tileProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -325,7 +509,12 @@ class _LiveHeroCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  const NearbyMap(),
+                  _MapPreview(
+                    origin: origin,
+                    listings: listings,
+                    onTap: onOpenMap,
+                    tileProvider: tileProvider,
+                  ),
                   Positioned(
                     left: 10,
                     bottom: 10,
@@ -341,6 +530,66 @@ class _LiveHeroCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The Home card's map.
+///
+/// Shows the same listings the page below it lists, at the same coordinates,
+/// so the preview and the cards can never disagree. The whole thing is one
+/// tap target: it is a door to Explore's map view, not a map to work in.
+class _MapPreview extends StatelessWidget {
+  const _MapPreview({
+    required this.origin,
+    required this.listings,
+    this.onTap,
+    this.tileProvider,
+  });
+
+  final GeoPoint? origin;
+  final List<FoodListing> listings;
+  final VoidCallback? onTap;
+  final TileProvider? tileProvider;
+
+  @override
+  Widget build(BuildContext context) {
+    final center = origin;
+    // Without a real fix there is nothing honest to centre on, so the design's
+    // illustration stays. It is plainly stylised, which is the point: it never
+    // claims to be showing the user where anything is.
+    if (center == null) return const NearbyMap();
+
+    final pins = <MapPin>[];
+    for (final listing in listings) {
+      final point = GeoPoint.tryFrom(listing.latitude, listing.longitude);
+      if (point == null) continue;
+      pins.add(MapPin(point: point, id: listing.id, label: listing.title));
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      // Opaque, over an IgnorePointer: the map builds its own gesture
+      // detector even with interaction disabled, and it would otherwise
+      // swallow the tap and leave the card looking broken.
+      behavior: HitTestBehavior.opaque,
+      child: Semantics(
+        button: onTap != null,
+        label: 'Open the map view',
+        child: IgnorePointer(
+          child: FoodLoopMap(
+            center: center,
+            currentLocation: center,
+            pins: pins,
+            zoom: 13,
+            height: 126,
+            // Read-only: every touch belongs to the card, which opens
+            // Explore.
+            interactive: false,
+            tileProvider: tileProvider,
+          ),
+        ),
       ),
     );
   }
@@ -703,7 +952,8 @@ class _ImpactPreview extends StatelessWidget {
     this.onViewImpact,
   });
 
-  final int mealsRescued;
+  /// Null while the count is still loading — rendered as "—", never as 0.
+  final int? mealsRescued;
   final double? foodDivertedKg;
   final VoidCallback? onViewImpact;
 
@@ -763,7 +1013,10 @@ class _ImpactPreview extends StatelessWidget {
             children: [
               Expanded(
                 child: _Metric(
-                  value: '$mealsRescued',
+                  // "—" while unknown, matching how an absent weight reads.
+                  // A premature 0 would tell someone who has rescued food
+                  // that they have not.
+                  value: mealsRescued == null ? '—' : '$mealsRescued',
                   label: 'meals rescued',
                 ),
               ),

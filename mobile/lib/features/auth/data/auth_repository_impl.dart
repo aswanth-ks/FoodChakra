@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/config/env.dart';
 import '../../../core/error/failures.dart';
 import '../domain/account.dart';
 import '../domain/auth_repository.dart';
@@ -70,9 +71,20 @@ class AuthRepositoryImpl implements AuthRepository {
   ///
   /// These endpoints return an acknowledgement and nothing else — no account,
   /// no tokens, and never a code.
+  ///
+  /// Every one of them emails a code before it answers, so they are given
+  /// `Env.emailReceiveTimeout` rather than the client-wide read timeout. The
+  /// default is sized for an ordinary API read and expires while the server is
+  /// still talking to SMTP — the work then completes server-side while the
+  /// caller sees a timeout, which is how a registered user with the code
+  /// already in their inbox ends up stuck on the form.
   Future<void> _post(String path, Map<String, dynamic> body) async {
     try {
-      await _dio.post<Map<String, dynamic>>(path, data: body);
+      await _dio.post<Map<String, dynamic>>(
+        path,
+        data: body,
+        options: Options(receiveTimeout: Env.emailReceiveTimeout),
+      );
     } on DioException catch (e) {
       throw e.error is Failure ? e.error as Failure : const UnknownFailure();
     }

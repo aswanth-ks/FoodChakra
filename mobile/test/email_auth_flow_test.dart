@@ -21,6 +21,11 @@ import 'package:foodloop/features/rescue/domain/rescue_repository.dart';
 import 'package:foodloop/features/rescue/presentation/listing_providers.dart';
 import 'package:foodloop/features/rescue/presentation/rescue_providers.dart';
 import 'package:go_router/go_router.dart';
+import 'package:foodloop/core/location/location_cache.dart';
+import 'package:foodloop/core/location/location_providers.dart';
+
+import 'support/fake_location_cache.dart';
+import 'support/inert_location_service.dart';
 
 Account verifiedAccount() => const Account(
   id: 'u1',
@@ -177,6 +182,13 @@ void main() {
     final container = ProviderContainer(
       retry: (retryCount, error) => null,
       overrides: [
+        // Nothing remembered from a previous launch, and no platform channel
+        // to hang on. Tests that want a remembered fix seed it themselves.
+        locationCacheProvider.overrideWithValue(FakeLocationCache()),
+        // No platform channel for these tests to hang on either.
+        locationServiceProvider.overrideWithValue(
+          const InertLocationService(),
+        ),
         authRepositoryProvider.overrideWithValue(auth),
         listingRepositoryProvider.overrideWithValue(EmptyListings()),
         rescueRepositoryProvider.overrideWithValue(EmptyRescues()),

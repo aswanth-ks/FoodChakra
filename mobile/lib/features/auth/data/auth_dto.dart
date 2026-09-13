@@ -16,6 +16,7 @@ class AccountDto {
     required this.emailVerified,
     required this.isStaff,
     this.partnerId,
+    this.createdAt,
   });
 
   final String id;
@@ -26,6 +27,7 @@ class AccountDto {
   final bool emailVerified;
   final bool isStaff;
   final String? partnerId;
+  final DateTime? createdAt;
 
   factory AccountDto.fromJson(Map<String, dynamic> json) => AccountDto(
     id: json['id'] as String? ?? '',
@@ -36,6 +38,9 @@ class AccountDto {
     emailVerified: json['email_verified'] as bool? ?? false,
     isStaff: json['is_staff'] as bool? ?? false,
     partnerId: json['partner_id'] as String?,
+    // Tolerates absence and malformed values alike: a profile without a
+    // membership date is better than one that refuses to load.
+    createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
   );
 
   Account toDomain() => Account(
@@ -47,6 +52,7 @@ class AccountDto {
     emailVerified: emailVerified,
     isStaff: isStaff,
     partnerId: partnerId,
+    createdAt: createdAt,
   );
 }
 

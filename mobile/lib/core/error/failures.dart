@@ -67,6 +67,15 @@ class ServiceUnavailableFailure extends Failure {
 }
 
 /// 404 — resource does not exist.
+/// 409 — the thing is no longer in the state the request assumed.
+///
+/// Tap-to-claim's normal loser: someone else took the listing first. Distinct
+/// from [UnknownFailure], which it used to fall through to, so a caller can
+/// refresh the stale view rather than only apologising.
+class ConflictFailure extends Failure {
+  const ConflictFailure([super.message = 'That is no longer available.']);
+}
+
 class NotFoundFailure extends Failure {
   const NotFoundFailure([super.message = 'Not found.']);
 }

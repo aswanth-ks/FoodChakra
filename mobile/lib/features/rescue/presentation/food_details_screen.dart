@@ -8,8 +8,8 @@ import 'widgets/rescue_widgets.dart';
 /// Faithful translation of the Stitch design
 /// (screen `87586e9ef13d4197977c3d229a7a4b91`).
 ///
-/// UI only. Bookmarking is local state and [onRescue] opens the confirmation
-/// sheet; nothing is reserved until the Phase 5 rescue service exists.
+/// Bookmarking is local state; [onRescue] opens the confirmation sheet and the
+/// caller performs the real claim.
 class FoodDetailsScreen extends StatefulWidget {
   const FoodDetailsScreen({
     super.key,
@@ -17,6 +17,7 @@ class FoodDetailsScreen extends StatefulWidget {
     this.onBack,
     this.onRescue,
     this.onViewOnMap,
+    this.rescuing = false,
   });
 
   final FoodListing listing;
@@ -24,6 +25,11 @@ class FoodDetailsScreen extends StatefulWidget {
 
   /// Opens the rescue confirmation sheet.
   final VoidCallback? onRescue;
+
+  /// True while a claim is in flight. The button is disabled and shows a
+  /// spinner for the duration: the claim is not idempotent, and a second tap
+  /// would be a second attempt on a listing the first may already have taken.
+  final bool rescuing;
 
   final VoidCallback? onViewOnMap;
 
@@ -132,7 +138,10 @@ class _FoodDetailsScreenState extends State<FoodDetailsScreen> {
                     ],
                   ),
                 ),
-                _StickyRescueBar(onRescue: widget.onRescue),
+                _StickyRescueBar(
+                  onRescue: widget.rescuing ? null : widget.onRescue,
+                  busy: widget.rescuing,
+                ),
               ],
             ),
           ),
@@ -504,9 +513,10 @@ class _SharedByCard extends StatelessWidget {
 }
 
 class _StickyRescueBar extends StatelessWidget {
-  const _StickyRescueBar({this.onRescue});
+  const _StickyRescueBar({this.onRescue, this.busy = false});
 
   final VoidCallback? onRescue;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -525,11 +535,22 @@ class _StickyRescueBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          child: RescuePrimaryButton(
-            label: 'Rescue this food',
-            icon: Icons.shopping_bag_outlined,
-            onPressed: onRescue,
-          ),
+          child: busy
+              ? const SizedBox(
+                  height: 52,
+                  child: Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                  ),
+                )
+              : RescuePrimaryButton(
+                  label: 'Rescue this food',
+                  icon: Icons.shopping_bag_outlined,
+                  onPressed: onRescue,
+                ),
         ),
       ),
     );
