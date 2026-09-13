@@ -169,7 +169,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 const SizedBox(height: 14),
                 _LiveStreamBanner(newCount: widget.newOpportunityCount),
                 const SizedBox(height: 12),
-                // Exactly one of four: loading, failed, empty, or results.
+                // Loading and failure look the same in both views. After
+                // that the chosen view decides, and the map is drawn whether
+                // or not anything is on it: the empty check used to come
+                // first, which made the Map toggle appear broken on a quiet
+                // day — the button highlighted and nothing changed. A map of
+                // where you are with no pins on it is a real answer.
                 if (widget.resultsLoading)
                   const _ResultsSkeleton()
                 else if (widget.resultsError != null)
@@ -177,9 +182,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     error: widget.resultsError!,
                     onRetry: widget.onRetry,
                   )
+                else if (_view == ExploreResultView.map)
+                  _ResultsMap(
+                    origin: widget.origin,
+                    listings: listings,
+                    emptyMessage: widget.emptyMessage,
+                    onOpenListing: widget.onOpenListing,
+                    tileProvider: widget.tileProvider,
+                  )
                 else if (listings.isEmpty)
                   _NoResults(message: widget.emptyMessage)
-                else if (_view == ExploreResultView.list)
+                else
                   for (var i = 0; i < listings.length; i++) ...[
                     if (i > 0) const SizedBox(height: 12),
                     ExploreListingCard(
@@ -187,14 +200,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       onTap: () => widget.onOpenListing?.call(listings[i]),
                       onRescue: () => widget.onOpenListing?.call(listings[i]),
                     ),
-                  ]
-                else
-                  _ResultsMap(
-                    origin: widget.origin,
-                    listings: listings,
-                    onOpenListing: widget.onOpenListing,
-                    tileProvider: widget.tileProvider,
-                  ),
+                  ],
               ],
             ),
           ),
@@ -1007,12 +1013,18 @@ class _ResultsMap extends StatelessWidget {
   const _ResultsMap({
     required this.origin,
     required this.listings,
+    this.emptyMessage,
     this.onOpenListing,
     this.tileProvider,
   });
 
   final GeoPoint? origin;
   final List<FoodListing> listings;
+
+  /// Filter-specific wording for "nothing here", shown under the map rather
+  /// than instead of it.
+  final String? emptyMessage;
+
   final void Function(FoodListing listing)? onOpenListing;
   final TileProvider? tileProvider;
 
@@ -1083,6 +1095,17 @@ class _ResultsMap extends StatelessWidget {
           pins: pins,
           tileProvider: tileProvider,
         ),
+        // Said under the map, not in place of it. The user asked to see the
+        // map; "there is nothing on it" is information, not a reason to take
+        // it away.
+        if (listings.isEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            emptyMessage ?? 'No surplus food nearby yet — nothing to show on '
+                'the map.',
+            style: rescueFont(12.5, 400, color: RescueColors.muted),
+          ),
+        ],
         if (pins.length < listings.length) ...[
           const SizedBox(height: 8),
           Text(

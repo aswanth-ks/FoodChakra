@@ -658,6 +658,59 @@ void main() {
       );
     });
 
+    testWidgets('the Map toggle opens the map even with nothing nearby', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        ExploreScreen(
+          listings: const [],
+          origin: GeoPoint.tryFrom(_karur.latitude, _karur.longitude)!,
+          tileProvider: BlankTileProvider(),
+        ),
+      );
+
+      // The empty state, as expected, while the list is showing.
+      expect(find.text('Nothing to rescue right now'), findsOneWidget);
+
+      await tester.tap(find.text('Map'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // The map opens. The empty check used to run first, so this toggle
+      // highlighted and nothing happened — it looked broken.
+      expect(find.byType(FlutterMap), findsOneWidget);
+      expect(find.bySemanticsLabel('Your location'), findsNothing);
+      // And the emptiness is said under the map, not instead of it.
+      expect(
+        find.text(
+          'No surplus food nearby yet — nothing to show on the map.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Nothing to rescue right now'), findsNothing);
+    });
+
+    testWidgets('switching back to List restores the empty state', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        ExploreScreen(
+          listings: const [],
+          origin: GeoPoint.tryFrom(_karur.latitude, _karur.longitude)!,
+          tileProvider: BlankTileProvider(),
+        ),
+      );
+
+      await tester.tap(find.text('Map'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('List'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(FlutterMap), findsNothing);
+      expect(find.text('Nothing to rescue right now'), findsOneWidget);
+    });
+
     testWidgets('with no location the map says so rather than guessing', (
       tester,
     ) async {
