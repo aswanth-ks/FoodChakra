@@ -123,8 +123,12 @@ class AuthRepositoryImpl implements AuthRepository {
         return null;
       }
       // A network problem is different: the tokens may still be perfectly
-      // good, so they are kept and the caller decides what to show.
-      throw failure is Failure ? failure : const UnknownFailure();
+      // good, so they are kept — and the caller is told this is an unchecked
+      // session rather than an absent one, so it does not show onboarding to
+      // somebody who is signed in and merely offline.
+      throw SessionUnverifiedFailure(
+        failure is Failure ? failure : const UnknownFailure(),
+      );
     }
   }
 

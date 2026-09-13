@@ -7,6 +7,8 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 
+import '../../../core/error/failures.dart';
+
 /// FoodLoop splash screen.
 ///
 /// A faithful translation of the Stitch design
@@ -22,12 +24,26 @@ import '../../../app/theme/app_typography.dart';
 /// onboarding, and a slow restore is waited for here rather than flickering
 /// through a sign-in screen.
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key, this.onComplete});
+  const SplashScreen({
+    super.key,
+    this.onComplete,
+    this.error,
+    this.onRetry,
+  });
 
   /// Called once the entrance animation has finished and rested. It reports
   /// only that the animation is over — never where to go — so this screen
   /// stays navigation-agnostic and testable without a router.
   final VoidCallback? onComplete;
+
+  /// Set only when there are stored credentials the server could not be asked
+  /// about — typically no connection, or a backend still waking up.
+  ///
+  /// The user is **not** signed out, so they are not moved to onboarding. They
+  /// wait here instead, told what actually happened, with a way to try again.
+  final Object? error;
+
+  final VoidCallback? onRetry;
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -154,12 +170,64 @@ class _SplashScreenState extends State<SplashScreen>
                       style: AppTypography.splashTagline,
                     ),
                   ),
+                  if (widget.error != null) ...[
+                    const SizedBox(height: AppSpacing.xl),
+                    _UnverifiedSessionNotice(
+                      error: widget.error!,
+                      onRetry: widget.onRetry,
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Shown when a stored session could not be checked with the server.
+///
+/// Deliberately says nothing about being signed out, because nobody knows
+/// that: the credentials are still on the device and may be perfectly good.
+class _UnverifiedSessionNotice extends StatelessWidget {
+  const _UnverifiedSessionNotice({required this.error, this.onRetry});
+
+  final Object error;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final failure = error is Failure ? error as Failure : null;
+
+    return Column(
+      children: [
+        Text(
+          failure?.message ?? "Couldn't reach FoodLoop.",
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'You are still signed in — check your connection and try again.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
+        if (onRetry != null) ...[
+          const SizedBox(height: AppSpacing.lg),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Try again'),
+          ),
+        ],
+      ],
     );
   }
 }

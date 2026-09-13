@@ -378,6 +378,75 @@ void main() {
     });
   });
 
+  group('an unchecked session', () {
+    testWidgets('a network failure does not show onboarding', (tester) async {
+      // Credentials are on the device; the server just could not be asked.
+      auth.restoreFailure = const SessionUnverifiedFailure(NetworkFailure());
+
+      final handle = await pumpApp(tester);
+      await finishSplash(tester);
+
+      // Telling a signed-in user they have no account is both false and
+      // unrecoverable without signing in again.
+      expect(handle.location, isNot(AppRoutes.welcome));
+      expect(handle.location, AppRoutes.splash);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(
+        find.text(
+          'You are still signed in — check your connection and try again.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('it still lets nobody into a protected route', (tester) async {
+      auth.restoreFailure = const SessionUnverifiedFailure(NetworkFailure());
+
+      final handle = await pumpApp(tester);
+      await finishSplash(tester);
+      handle.router.go(AppRoutes.home);
+      await settle(tester);
+
+      // A session nobody has validated stays unvalidated. Being offline is
+      // not a way past `/auth/me`.
+      expect(handle.location, AppRoutes.splash);
+    });
+
+    testWidgets('Try again re-checks and recovers', (tester) async {
+      auth.restoreFailure = const SessionUnverifiedFailure(NetworkFailure());
+
+      final handle = await pumpApp(tester);
+      await finishSplash(tester);
+      expect(handle.location, AppRoutes.splash);
+      final callsBefore = auth.restoreCalls;
+
+      // The network comes back.
+      auth.restoreFailure = null;
+      auth.restored = account();
+
+      await tester.tap(find.text('Try again'));
+      await finishSplash(tester);
+      await settle(tester);
+
+      expect(auth.restoreCalls, greaterThan(callsBefore));
+      expect(handle.location, AppRoutes.home);
+    });
+
+    testWidgets('an empty restore still means onboarding', (tester) async {
+      // No failure, no account: genuinely signed out, which is a different
+      // thing and must keep its existing behaviour.
+      auth
+        ..restoreFailure = null
+        ..restored = null;
+
+      final handle = await pumpApp(tester);
+      await finishSplash(tester);
+
+      expect(handle.location, AppRoutes.welcome);
+      expect(find.text('Try again'), findsNothing);
+    });
+  });
+
   group('logout', () {
     testWidgets('signing out clears the session and leaves the app', (
       tester,

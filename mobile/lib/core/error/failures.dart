@@ -96,6 +96,22 @@ class ServerFailure extends Failure {
   ]);
 }
 
+/// A session exists on the device but could not be checked with the server.
+///
+/// Not the same as being signed out, and the difference matters: the stored
+/// credentials may be perfectly good, and the only thing that actually
+/// happened is that the server could not be reached. Showing onboarding here
+/// tells the user they have no account, which is both false and unrecoverable
+/// without signing in again.
+///
+/// Carries [cause] so the screen can say what really went wrong.
+class SessionUnverifiedFailure extends Failure {
+  const SessionUnverifiedFailure(this.cause)
+    : super("Couldn't reach FoodLoop to check your session.");
+
+  final Failure cause;
+}
+
 /// Anything not covered above.
 class UnknownFailure extends Failure {
   const UnknownFailure([super.message = 'An unexpected error occurred.']);

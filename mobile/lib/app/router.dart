@@ -389,13 +389,24 @@ String? _authRedirect(Ref ref, GoRouterState state) {
   final account = auth.value;
   final signedIn = account != null;
 
+  // Credentials are stored but the server could not be asked about them. That
+  // is not the same as having no session, and must not be answered with
+  // onboarding: the user is held on the splash, which offers a retry. They are
+  // still not let into anything — a session nobody has validated stays
+  // unvalidated — but they are not told they are signed out either.
+  final unverified = auth.hasError && auth.error is SessionUnverifiedFailure;
+
   if (location == AppRoutes.splash) {
     // Hold the splash until the animation has rested *and* the restore has
-    // settled. A restore that fails leaves `account` null, which is the same
-    // answer as never having signed in — the user goes to onboarding.
+    // settled.
     if (!ref.read(splashGateProvider) || restoring) return null;
+    if (unverified) return null;
+    // A restore that came back empty is the same answer as never having
+    // signed in — the user goes to onboarding.
     return signedIn ? homeForRole(account.role) : AppRoutes.welcome;
   }
+
+  if (unverified) return AppRoutes.splash;
 
   // Deep links and cold starts can reach a route before the restore finishes.
   // Sending them back to the splash screen is what makes the guard reliable:
@@ -444,10 +455,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         // The splash no longer chooses a destination. It only reports that
         // its animation has finished; `_authRedirect` decides where to go
         // once the session restore has also settled.
-        builder: (context, state) => SplashScreen(
-          onComplete: () {
-            PerfTrace.mark('splash animation complete');
-            ref.read(splashGateProvider.notifier).markComplete();
+        builder: (context, state) => Consumer(
+          builder: (context, ref, _) {
+            final auth = ref.watch(authControllerProvider);
+            final unverified = auth.error is SessionUnverifiedFailure;
+
+            return SplashScreen(
+              onComplete: () {
+                PerfTrace.mark('splash animation complete');
+                ref.read(splashGateProvider.notifier).markComplete();
+              },
+              // Only set when there are credentials that could not be
+              // checked. The user is not signed out, so they are not sent to
+              // onboarding — they are told the truth and offered a retry.
+              error: unverified ? auth.error : null,
+              onRetry: () => ref.invalidate(authControllerProvider),
+            );
           },
         ),
       ),
