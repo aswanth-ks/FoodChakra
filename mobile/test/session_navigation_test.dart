@@ -24,6 +24,11 @@ import 'package:foodloop/features/rescue/presentation/listing_providers.dart';
 import 'package:foodloop/features/rescue/presentation/rescue_providers.dart';
 import 'package:foodloop/features/splash/presentation/splash_screen.dart';
 import 'package:go_router/go_router.dart';
+import 'package:foodloop/core/location/location_cache.dart';
+import 'package:foodloop/core/location/location_providers.dart';
+
+import 'support/fake_location_cache.dart';
+import 'support/inert_location_service.dart';
 
 Account account({AccountRole role = AccountRole.consumer}) => Account(
   id: 'u1',
@@ -93,6 +98,18 @@ class FakeAuthRepository implements AuthRepository {
     required String code,
     required String newPassword,
   }) async {}
+  /// Not exercised by this file. A stub rather than a fake, so a test that
+  /// reaches it fails loudly instead of quietly passing.
+  @override
+  Future<Account> updateProfile({required String fullName}) =>
+      throw UnimplementedError('updateProfile is not used in this test');
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) => throw UnimplementedError('changePassword is not used in this test');
+
 }
 
 class _SlowAuthRepository extends FakeAuthRepository {
@@ -183,6 +200,13 @@ void main() {
     final container = ProviderContainer(
       retry: (retryCount, error) => null,
       overrides: [
+        // Nothing remembered from a previous launch, and no platform channel
+        // to hang on. Tests that want a remembered fix seed it themselves.
+        locationCacheProvider.overrideWithValue(FakeLocationCache()),
+        // No platform channel for these tests to hang on either.
+        locationServiceProvider.overrideWithValue(
+          const InertLocationService(),
+        ),
         authRepositoryProvider.overrideWithValue(auth),
         listingRepositoryProvider.overrideWithValue(EmptyListingRepository()),
         rescueRepositoryProvider.overrideWithValue(EmptyRescueRepository()),
@@ -363,6 +387,75 @@ void main() {
 
       expect(handle.location, '/login');
       expect(find.byType(SignInScreen), findsOneWidget);
+    });
+  });
+
+  group('an unchecked session', () {
+    testWidgets('a network failure does not show onboarding', (tester) async {
+      // Credentials are on the device; the server just could not be asked.
+      auth.restoreFailure = const SessionUnverifiedFailure(NetworkFailure());
+
+      final handle = await pumpApp(tester);
+      await finishSplash(tester);
+
+      // Telling a signed-in user they have no account is both false and
+      // unrecoverable without signing in again.
+      expect(handle.location, isNot(AppRoutes.welcome));
+      expect(handle.location, AppRoutes.splash);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(
+        find.text(
+          'You are still signed in — check your connection and try again.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('it still lets nobody into a protected route', (tester) async {
+      auth.restoreFailure = const SessionUnverifiedFailure(NetworkFailure());
+
+      final handle = await pumpApp(tester);
+      await finishSplash(tester);
+      handle.router.go(AppRoutes.home);
+      await settle(tester);
+
+      // A session nobody has validated stays unvalidated. Being offline is
+      // not a way past `/auth/me`.
+      expect(handle.location, AppRoutes.splash);
+    });
+
+    testWidgets('Try again re-checks and recovers', (tester) async {
+      auth.restoreFailure = const SessionUnverifiedFailure(NetworkFailure());
+
+      final handle = await pumpApp(tester);
+      await finishSplash(tester);
+      expect(handle.location, AppRoutes.splash);
+      final callsBefore = auth.restoreCalls;
+
+      // The network comes back.
+      auth.restoreFailure = null;
+      auth.restored = account();
+
+      await tester.tap(find.text('Try again'));
+      await finishSplash(tester);
+      await settle(tester);
+
+      expect(auth.restoreCalls, greaterThan(callsBefore));
+      expect(handle.location, AppRoutes.home);
+    });
+
+    testWidgets('an empty restore still means onboarding', (tester) async {
+      // No failure, no account: genuinely signed out, which is a different
+      // thing and must keep its existing behaviour.
+      auth
+        ..restoreFailure = null
+        ..restored = null;
+
+      final handle = await pumpApp(tester);
+      await finishSplash(tester);
+
+      expect(handle.location, AppRoutes.welcome);
+      expect(find.text('Try again'), findsNothing);
     });
   });
 

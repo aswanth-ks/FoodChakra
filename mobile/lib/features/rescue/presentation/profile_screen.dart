@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../auth/domain/account_role.dart';
 import '../../../shared/widgets/consumer_nav_bar.dart';
 import 'widgets/rescue_widgets.dart';
 
@@ -8,37 +9,69 @@ import 'widgets/rescue_widgets.dart';
 /// Faithful translation of the Stitch design
 /// (screen `1c0764bd3d524834be8cb9cb61e9900f`).
 ///
-/// UI only. Every row is a destination that does not exist yet, so they are
-/// exposed as callbacks and left null by the router rather than being wired to
-/// placeholders. Phase 3 supplies the real profile and sign-out.
+/// Every value shown here comes from the signed-in account and the user's own
+/// completed records. The name, membership date and counts used to be
+/// constructor defaults — a name, "member since 2026", 48 meal boxes and 3
+/// shares — which meant every account saw one person's invented figures. They
+/// are required parameters now, so there is nothing left for the screen to
+/// fall back to and no way to render it without real data.
+///
+/// Settings rows remain callbacks left null by the router: their destinations
+/// genuinely do not exist yet, and an inert row is honest where a placeholder
+/// screen would not be.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({
     super.key,
-    this.name = 'Aswanth',
-    this.memberSinceLabel = 'FoodLoop member since 2026',
-    this.mealBoxesRescued = 48,
-    this.foodShares = 3,
+    required this.name,
+    required this.email,
+    required this.role,
+    required this.emailVerified,
+    this.mealBoxesRescued,
+    this.foodShares,
+    this.statsError,
+    this.onRetryStats,
+    this.memberSinceLabel,
     this.versionLabel = 'FoodLoop Version 2.4.0 · Consumer Edition',
     this.onBack,
     this.onEditProfile,
     this.onPersonalInformation,
-    this.onSavedLocations,
-    this.onFoodPreferences,
-    this.onNotifications,
-    this.onPrivacy,
-    this.onSafetyInformation,
-    this.onHelpCenter,
-    this.onContactSupport,
-    this.onTerms,
-    this.onPrivacyPolicy,
+    this.onChangePassword,
     this.onSignOut,
     this.onSelectTab,
   });
 
+  /// The account holder's name, exactly as the server reports it.
   final String name;
-  final String memberSinceLabel;
-  final int mealBoxesRescued;
-  final int foodShares;
+
+  /// The account's email address, from the session — never typed in here.
+  final String email;
+
+  /// The server-assigned role. Never inferred from the email address.
+  final AccountRole role;
+
+  /// Whether the server considers the address confirmed.
+  final bool emailVerified;
+
+  /// Real completed counts. Zero is a true answer and renders as "0".
+  ///
+  /// Null while they are still being fetched, or when fetching them failed.
+  /// The identity above them comes from the session and is already known, so
+  /// the page no longer waits on these: it used to sit behind one spinner
+  /// until two more requests finished, hiding a name it had in hand the whole
+  /// time. A dash is shown rather than a zero, because zero is a claim.
+  final int? mealBoxesRescued;
+  final int? foodShares;
+
+  /// Non-null when the counts could not be loaded. The rest of Profile still
+  /// works; only this strip reports a problem and offers a retry.
+  final Object? statsError;
+
+  final VoidCallback? onRetryStats;
+
+  /// "FoodLoop member since 2026", or null when the server gave no creation
+  /// date — in which case the line is omitted rather than invented.
+  final String? memberSinceLabel;
+
   final String versionLabel;
 
   /// Null when the screen is the nav-tab root, which has nothing to pop.
@@ -46,15 +79,10 @@ class ProfileScreen extends StatelessWidget {
 
   final VoidCallback? onEditProfile;
   final VoidCallback? onPersonalInformation;
-  final VoidCallback? onSavedLocations;
-  final VoidCallback? onFoodPreferences;
-  final VoidCallback? onNotifications;
-  final VoidCallback? onPrivacy;
-  final VoidCallback? onSafetyInformation;
-  final VoidCallback? onHelpCenter;
-  final VoidCallback? onContactSupport;
-  final VoidCallback? onTerms;
-  final VoidCallback? onPrivacyPolicy;
+
+  /// Opens the change-password screen. Every other settings row below is for
+  /// something that does not exist yet and says so.
+  final VoidCallback? onChangePassword;
 
   /// Invoked once the user confirms in the dialog, never straight from the
   /// button — signing out is destructive and the design offers no undo.
@@ -125,6 +153,9 @@ class ProfileScreen extends StatelessWidget {
                       _IdentityCard(
                         monogram: _monogram,
                         name: name,
+                        email: email,
+                        role: role,
+                        emailVerified: emailVerified,
                         memberSinceLabel: memberSinceLabel,
                         onEditProfile: onEditProfile,
                       ),
@@ -132,6 +163,8 @@ class ProfileScreen extends StatelessWidget {
                       _ContributionCard(
                         mealBoxesRescued: mealBoxesRescued,
                         foodShares: foodShares,
+                        error: statsError,
+                        onRetry: onRetryStats,
                       ),
                       const SizedBox(height: 24),
                       _SettingsSection(
@@ -144,10 +177,15 @@ class ProfileScreen extends StatelessWidget {
                             onTap: onPersonalInformation,
                           ),
                           _MenuEntry(
+                            icon: Icons.key_outlined,
+                            title: 'Change password',
+                            subtitle: 'Signs you out everywhere',
+                            onTap: onChangePassword,
+                          ),
+                          const _MenuEntry.unavailable(
                             icon: Icons.location_on_outlined,
                             title: 'Saved locations',
                             subtitle: 'Manage pickup locations',
-                            onTap: onSavedLocations,
                           ),
                         ],
                       ),
@@ -155,17 +193,15 @@ class ProfileScreen extends StatelessWidget {
                       _SettingsSection(
                         title: 'Preferences',
                         entries: [
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.restaurant_menu_rounded,
                             title: 'Food preferences',
                             subtitle: 'Dietary and rescue preferences',
-                            onTap: onFoodPreferences,
                           ),
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.notifications_none_rounded,
                             title: 'Notifications',
                             subtitle: 'Rescue updates and reminders',
-                            onTap: onNotifications,
                           ),
                         ],
                       ),
@@ -173,17 +209,15 @@ class ProfileScreen extends StatelessWidget {
                       _SettingsSection(
                         title: 'Privacy & safety',
                         entries: [
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.lock_outline_rounded,
                             title: 'Privacy',
                             subtitle: 'Location and account privacy',
-                            onTap: onPrivacy,
                           ),
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.shield_outlined,
                             title: 'Safety information',
                             subtitle: 'Food rescue safety guidance',
-                            onTap: onSafetyInformation,
                           ),
                         ],
                       ),
@@ -191,17 +225,15 @@ class ProfileScreen extends StatelessWidget {
                       _SettingsSection(
                         title: 'Help & support',
                         entries: [
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.help_outline_rounded,
                             title: 'Help center',
                             subtitle: 'Get answers to common questions',
-                            onTap: onHelpCenter,
                           ),
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.chat_bubble_outline_rounded,
                             title: 'Contact support',
                             subtitle: 'Need help with FoodLoop?',
-                            onTap: onContactSupport,
                           ),
                         ],
                       ),
@@ -209,15 +241,13 @@ class ProfileScreen extends StatelessWidget {
                       _SettingsSection(
                         title: 'About',
                         entries: [
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.description_outlined,
                             title: 'Terms of service',
-                            onTap: onTerms,
                           ),
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.privacy_tip_outlined,
                             title: 'Privacy policy',
-                            onTap: onPrivacyPolicy,
                           ),
                         ],
                       ),
@@ -296,13 +326,19 @@ class _IdentityCard extends StatelessWidget {
   const _IdentityCard({
     required this.monogram,
     required this.name,
+    required this.email,
+    required this.role,
+    required this.emailVerified,
     required this.memberSinceLabel,
     this.onEditProfile,
   });
 
   final String monogram;
   final String name;
-  final String memberSinceLabel;
+  final String email;
+  final AccountRole role;
+  final bool emailVerified;
+  final String? memberSinceLabel;
   final VoidCallback? onEditProfile;
 
   @override
@@ -347,11 +383,34 @@ class _IdentityCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  memberSinceLabel,
+                  email,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: rescueFont(12, 400, color: _labelMuted),
+                  style: rescueFont(12.5, 400, color: RescueColors.muted),
                 ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    _RoleChip(role: role),
+                    if (!emailVerified) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        'Unverified',
+                        style: rescueFont(11, 600, color: _destructive),
+                      ),
+                    ],
+                  ],
+                ),
+                // Omitted entirely when the server gave no creation date.
+                if (memberSinceLabel != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    memberSinceLabel!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: rescueFont(12, 400, color: _labelMuted),
+                  ),
+                ],
               ],
             ),
           ),
@@ -378,14 +437,41 @@ class _IdentityCard extends StatelessWidget {
   }
 }
 
+/// The server-assigned role, shown as given. There are two, and neither is
+/// derived on the client.
+class _RoleChip extends StatelessWidget {
+  const _RoleChip({required this.role});
+
+  final AccountRole role;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: RescueColors.primary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        role.isPartner ? 'Partner' : 'Consumer',
+        style: rescueFont(11, 600, color: RescueColors.primary),
+      ),
+    );
+  }
+}
+
 class _ContributionCard extends StatelessWidget {
   const _ContributionCard({
     required this.mealBoxesRescued,
     required this.foodShares,
+    this.error,
+    this.onRetry,
   });
 
-  final int mealBoxesRescued;
-  final int foodShares;
+  final int? mealBoxesRescued;
+  final int? foodShares;
+  final Object? error;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -407,7 +493,14 @@ class _ContributionCard extends StatelessWidget {
                 ),
               ),
               Text(
-                'Verified count',
+                // Says what it actually is. Calling an unknown figure a
+                // "verified count" is the sort of small lie that makes a
+                // whole screen untrustworthy.
+                error != null
+                    ? 'Unavailable'
+                    : (mealBoxesRescued == null
+                          ? 'Loading'
+                          : 'Verified count'),
                 style: rescueFont(11, 400, color: const Color(0xFF8A978F)),
               ),
             ],
@@ -417,16 +510,51 @@ class _ContributionCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _StatTile(
-                  value: '$mealBoxesRescued',
+                  value: mealBoxesRescued?.toString() ?? '—',
                   label: 'Meal boxes rescued',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _StatTile(value: '$foodShares', label: 'Food shares'),
+                child: _StatTile(
+                  value: foodShares?.toString() ?? '—',
+                  label: 'Food shares',
+                ),
               ),
             ],
           ),
+          // Only this strip failed. The name, email and settings above it are
+          // unaffected and stay usable.
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    "Couldn't load your totals.",
+                    style: rescueFont(12, 400, color: _labelMuted),
+                  ),
+                ),
+                if (onRetry != null)
+                  TextButton(
+                    onPressed: onRetry,
+                    style: TextButton.styleFrom(
+                      foregroundColor: RescueColors.primary,
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Try again',
+                      style: rescueFont(12, 600, color: RescueColors.primary),
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -481,7 +609,20 @@ class _MenuEntry {
     required this.title,
     this.subtitle,
     this.onTap,
-  });
+  }) : available = true;
+
+  /// A row for something that does not exist yet.
+  ///
+  /// Shown greyed, badged, and inert. The alternative — leaving the row
+  /// looking exactly like a working one and wiring it to nothing — is worse
+  /// than either building it or removing it: the user presses it, nothing
+  /// happens, and they cannot tell whether the app is broken or they are.
+  const _MenuEntry.unavailable({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+  }) : onTap = null,
+       available = false;
 
   final IconData icon;
   final String title;
@@ -490,6 +631,9 @@ class _MenuEntry {
   final String? subtitle;
 
   final VoidCallback? onTap;
+
+  /// False for a row whose destination does not exist yet.
+  final bool available;
 }
 
 /// Uppercase heading plus a white card of hairline-divided rows.
@@ -549,11 +693,16 @@ class _SettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final available = entry.available;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: entry.onTap,
-        child: Padding(
+        child: Opacity(
+          // Unmistakably not ready, without moving anything.
+          opacity: available ? 1 : 0.45,
+          child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
@@ -592,12 +741,29 @@ class _SettingsRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: _chevron,
-              ),
+              if (available)
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: _chevron,
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEDF0EE),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    'Soon',
+                    style: rescueFont(10.5, 700, color: _labelMuted),
+                  ),
+                ),
             ],
+          ),
           ),
         ),
       ),

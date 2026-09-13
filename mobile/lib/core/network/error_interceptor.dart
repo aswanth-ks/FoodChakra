@@ -57,6 +57,10 @@ class ErrorInterceptor extends Interceptor {
         message ?? 'You do not have permission to do this.',
       ),
       404 => NotFoundFailure(message ?? 'Not found.'),
+      // Tap-to-claim races land here. The server's wording names the actual
+      // reason — already rescued, or your own listing — so it is passed
+      // through rather than replaced.
+      409 => ConflictFailure(message ?? 'That is no longer available.'),
       422 => ValidationFailure(
         message ?? 'Please check the highlighted fields.',
         code: code,

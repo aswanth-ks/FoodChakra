@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, status
 
 from app.features.auth.dependencies import CurrentUser, get_auth_service
 from app.features.auth.schemas import (
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
@@ -19,6 +20,7 @@ from app.features.auth.schemas import (
     ResendVerificationRequest,
     ResetPasswordRequest,
     TokenResponse,
+    UpdateProfileRequest,
     UserResponse,
     VerifyEmailRequest,
 )
@@ -183,3 +185,43 @@ async def logout(
 )
 async def me(user: CurrentUser) -> UserResponse:
     return user
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Update the authenticated account",
+    description=(
+        "Changes the caller's own display name. The account is identified "
+        "from the access token; no request may name another user. Email, "
+        "role, status and staff level are not editable here."
+    ),
+)
+async def update_me(
+    payload: UpdateProfileRequest,
+    user: CurrentUser,
+    service: ServiceDep,
+) -> UserResponse:
+    return await service.update_profile(user.id, full_name=payload.full_name)
+
+
+@router.post(
+    "/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Change the password of the authenticated account",
+    description=(
+        "Requires the current password as proof, and revokes every refresh "
+        "session on success — so the user signs in again, here and everywhere "
+        "else."
+    ),
+)
+async def change_password(
+    payload: ChangePasswordRequest,
+    user: CurrentUser,
+    service: ServiceDep,
+) -> None:
+    await service.change_password(
+        user.id,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )

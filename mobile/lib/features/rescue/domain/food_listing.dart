@@ -1,8 +1,8 @@
 /// A surplus-food listing a consumer can rescue.
 ///
-/// Deliberately a plain value type with no JSON: the listings API arrives in
-/// Phase 5, at which point a `FoodListingDto` in `data/` maps onto this and the
-/// fixtures in `data/sample_listings.dart` are deleted.
+/// A plain value type with no JSON of its own: `FoodListingDto` in `data/`
+/// owns the wire format and maps onto this, which is why the screens needed no
+/// changes when the fixtures were replaced by the real listings API.
 enum ListingUrgency {
   /// Inside its pickup window with time to spare — shown in brand green.
   available,

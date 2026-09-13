@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/map/geo_point.dart';
 import '../../rescue/presentation/widgets/rescue_widgets.dart';
 import '../domain/surplus_draft.dart';
 import 'widgets/give_widgets.dart';
@@ -10,8 +11,10 @@ import 'widgets/give_widgets.dart';
 /// (screen `3d47cf51ed654c5aac6fc3c7c884b342`).
 ///
 /// The date chips, the two time controls and the custom-date picker are all
-/// live. Choosing a different pickup point needs the Phase 8 map, so those
-/// actions stay inert.
+/// live. "Choose on map" and "Current location" both resolve to a real
+/// coordinate and write it onto the draft, which is what the listing is
+/// published with — the place *name* below is for the rescuer to read, not
+/// for the query to search on.
 class AvailabilityPickupScreen extends StatefulWidget {
   const AvailabilityPickupScreen({
     super.key,
@@ -27,8 +30,13 @@ class AvailabilityPickupScreen extends StatefulWidget {
   final VoidCallback? onBack;
   final void Function(SurplusDraft draft)? onContinue;
   final VoidCallback? onChangeLocation;
-  final VoidCallback? onUseCurrentLocation;
-  final VoidCallback? onChooseOnMap;
+
+  /// Resolve a real point from the device, or null if it could not be taken.
+  final Future<GeoPoint?> Function()? onUseCurrentLocation;
+
+  /// Open the map picker, returning the point the user confirmed there, or
+  /// null if they backed out without confirming.
+  final Future<GeoPoint?> Function(GeoPoint? current)? onChooseOnMap;
 
   @override
   State<AvailabilityPickupScreen> createState() =>
@@ -37,6 +45,37 @@ class AvailabilityPickupScreen extends StatefulWidget {
 
 class _AvailabilityPickupScreenState extends State<AvailabilityPickupScreen> {
   late SurplusDraft _draft = widget.draft;
+
+  /// Whether a point is being taken from the device right now.
+  bool _locating = false;
+
+  GeoPoint? get _point =>
+      GeoPoint.tryFrom(_draft.pickupLatitude, _draft.pickupLongitude);
+
+  void _setPoint(GeoPoint? point) {
+    if (point == null || !mounted) return;
+    setState(() {
+      _draft = _draft.copyWith(
+        pickupLatitude: point.latitude,
+        pickupLongitude: point.longitude,
+      );
+    });
+  }
+
+  Future<void> _chooseOnMap() async {
+    final chosen = await widget.onChooseOnMap?.call(_point);
+    _setPoint(chosen);
+  }
+
+  Future<void> _useCurrentLocation() async {
+    if (_locating) return;
+    setState(() => _locating = true);
+    try {
+      _setPoint(await widget.onUseCurrentLocation?.call());
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
 
   Future<void> _pickTime({required bool isStart}) async {
     final picked = await showTimePicker(
@@ -208,7 +247,8 @@ class _AvailabilityPickupScreenState extends State<AvailabilityPickupScreen> {
                       _LocationCard(
                         name: _draft.pickupLocation,
                         distanceLabel: _draft.pickupDistanceLabel,
-                        onChange: widget.onChangeLocation,
+                        point: _point,
+                        onChange: widget.onChangeLocation ?? _chooseOnMap,
                       ),
                       const SizedBox(height: 10),
                       Row(
@@ -217,7 +257,10 @@ class _AvailabilityPickupScreenState extends State<AvailabilityPickupScreen> {
                             child: _LocationAction(
                               icon: Icons.my_location_rounded,
                               label: 'Current location',
-                              onTap: widget.onUseCurrentLocation,
+                              busy: _locating,
+                              onTap: widget.onUseCurrentLocation == null
+                                  ? null
+                                  : _useCurrentLocation,
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -225,7 +268,9 @@ class _AvailabilityPickupScreenState extends State<AvailabilityPickupScreen> {
                             child: _LocationAction(
                               icon: Icons.map_outlined,
                               label: 'Choose on map',
-                              onTap: widget.onChooseOnMap,
+                              onTap: widget.onChooseOnMap == null
+                                  ? null
+                                  : _chooseOnMap,
                             ),
                           ),
                         ],
@@ -436,11 +481,17 @@ class _LocationCard extends StatelessWidget {
   const _LocationCard({
     required this.name,
     required this.distanceLabel,
+    this.point,
     this.onChange,
   });
 
   final String name;
   final String distanceLabel;
+
+  /// The confirmed pickup point, shown so the user can see that choosing one
+  /// actually changed something. Null until they pick one.
+  final GeoPoint? point;
+
   final VoidCallback? onChange;
 
   @override
@@ -503,7 +554,12 @@ class _LocationCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Near your current location · $distanceLabel',
+                    // Says where the food actually is once that is known,
+                    // rather than continuing to claim "near your current
+                    // location" about a point somewhere else entirely.
+                    point == null
+                        ? 'Near your current location · $distanceLabel'
+                        : 'Pickup point $point',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: rescueFont(12, 400, color: RescueColors.muted),
@@ -524,11 +580,20 @@ class _LocationCard extends StatelessWidget {
 }
 
 class _LocationAction extends StatelessWidget {
-  const _LocationAction({required this.icon, required this.label, this.onTap});
+  const _LocationAction({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.busy = false,
+  });
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
+
+  /// Shown while a fix is being taken, so a slow GPS does not look inert and
+  /// invite a second press.
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -544,7 +609,14 @@ class _LocationAction extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 15, color: RescueColors.primary),
+            if (busy)
+              const SizedBox(
+                width: 15,
+                height: 15,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              Icon(icon, size: 15, color: RescueColors.primary),
             const SizedBox(width: 6),
             Flexible(
               child: Text(

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/config/env.dart';
 import '../../../core/error/failures.dart';
 import '../domain/account.dart';
 import '../domain/auth_repository.dart';
@@ -70,9 +71,20 @@ class AuthRepositoryImpl implements AuthRepository {
   ///
   /// These endpoints return an acknowledgement and nothing else — no account,
   /// no tokens, and never a code.
+  ///
+  /// Every one of them emails a code before it answers, so they are given
+  /// `Env.emailReceiveTimeout` rather than the client-wide read timeout. The
+  /// default is sized for an ordinary API read and expires while the server is
+  /// still talking to SMTP — the work then completes server-side while the
+  /// caller sees a timeout, which is how a registered user with the code
+  /// already in their inbox ends up stuck on the form.
   Future<void> _post(String path, Map<String, dynamic> body) async {
     try {
-      await _dio.post<Map<String, dynamic>>(path, data: body);
+      await _dio.post<Map<String, dynamic>>(
+        path,
+        data: body,
+        options: Options(receiveTimeout: Env.emailReceiveTimeout),
+      );
     } on DioException catch (e) {
       throw e.error is Failure ? e.error as Failure : const UnknownFailure();
     }
@@ -87,6 +99,33 @@ class AuthRepositoryImpl implements AuthRepository {
       'email': email,
       'password': password,
     });
+  }
+
+  @override
+  Future<Account> updateProfile({required String fullName}) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/auth/me',
+      data: {'full_name': fullName},
+    );
+    final data = response.data;
+    if (data == null) throw const UnknownFailure();
+    return AccountDto.fromJson(data).toDomain();
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    // Neither value is logged, held, or echoed anywhere. The request body is
+    // the only place either one exists on this device.
+    await _dio.post<void>(
+      '/auth/change-password',
+      data: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      },
+    );
   }
 
   @override
@@ -111,8 +150,12 @@ class AuthRepositoryImpl implements AuthRepository {
         return null;
       }
       // A network problem is different: the tokens may still be perfectly
-      // good, so they are kept and the caller decides what to show.
-      throw failure is Failure ? failure : const UnknownFailure();
+      // good, so they are kept — and the caller is told this is an unchecked
+      // session rather than an absent one, so it does not show onboarding to
+      // somebody who is signed in and merely offline.
+      throw SessionUnverifiedFailure(
+        failure is Failure ? failure : const UnknownFailure(),
+      );
     }
   }
 

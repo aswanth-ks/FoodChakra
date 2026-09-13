@@ -14,6 +14,7 @@ class Account {
     required this.emailVerified,
     this.isStaff = false,
     this.partnerId,
+    this.createdAt,
   });
 
   final String id;
@@ -29,6 +30,12 @@ class Account {
 
   /// The business this account acts for. Non-null only for partners.
   final String? partnerId;
+
+  /// When the account was created, as the server recorded it.
+  ///
+  /// Nullable because an older stored session may predate the field; the
+  /// profile says nothing about membership date rather than guessing one.
+  final DateTime? createdAt;
 
   bool get isPartner => role.isPartner;
 }

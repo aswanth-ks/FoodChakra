@@ -26,7 +26,6 @@ const Set<String> kPublicRoutes = {
   '/onboarding/welcome',
   '/onboarding/share',
   '/onboarding/impact',
-  '/onboarding/location',
   '/login',
   '/register',
   '/create-account',
@@ -40,11 +39,17 @@ const Set<String> kPublicRoutes = {
 /// `/verify-email` and `/forgot-password` are deliberately absent: the first
 /// is reached *while* authenticated, immediately after registering, and the
 /// second is a legitimate detour.
+///
+/// `/onboarding/location` is absent for a stronger reason. It sits in neither
+/// this set nor [kPublicRoutes], which makes it an ordinary authenticated
+/// route: a signed-out visitor is sent to sign-in, and a signed-in one is
+/// left alone. It used to be in both, and the two rules together meant the
+/// post-login location gate sent the user to a route the redirect bounced
+/// straight back to home — the gate ran, and never changed anything.
 const Set<String> kUnauthenticatedOnlyRoutes = {
   '/onboarding/welcome',
   '/onboarding/share',
   '/onboarding/impact',
-  '/onboarding/location',
   '/login',
   '/register',
   '/create-account',

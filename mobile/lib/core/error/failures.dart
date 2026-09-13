@@ -67,6 +67,15 @@ class ServiceUnavailableFailure extends Failure {
 }
 
 /// 404 — resource does not exist.
+/// 409 — the thing is no longer in the state the request assumed.
+///
+/// Tap-to-claim's normal loser: someone else took the listing first. Distinct
+/// from [UnknownFailure], which it used to fall through to, so a caller can
+/// refresh the stale view rather than only apologising.
+class ConflictFailure extends Failure {
+  const ConflictFailure([super.message = 'That is no longer available.']);
+}
+
 class NotFoundFailure extends Failure {
   const NotFoundFailure([super.message = 'Not found.']);
 }
@@ -85,6 +94,22 @@ class ServerFailure extends Failure {
   const ServerFailure([
     super.message = 'Something went wrong. Please try again.',
   ]);
+}
+
+/// A session exists on the device but could not be checked with the server.
+///
+/// Not the same as being signed out, and the difference matters: the stored
+/// credentials may be perfectly good, and the only thing that actually
+/// happened is that the server could not be reached. Showing onboarding here
+/// tells the user they have no account, which is both false and unrecoverable
+/// without signing in again.
+///
+/// Carries [cause] so the screen can say what really went wrong.
+class SessionUnverifiedFailure extends Failure {
+  const SessionUnverifiedFailure(this.cause)
+    : super("Couldn't reach FoodLoop to check your session.");
+
+  final Failure cause;
 }
 
 /// Anything not covered above.

@@ -12,6 +12,7 @@ from typing import Any
 from bson import ObjectId
 from bson.errors import InvalidId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 
 from app.db import collections as col
 
@@ -231,6 +232,41 @@ class UserRepository:
                     "updated_at": datetime.now(UTC),
                 },
                 "$unset": {"password_reset": ""},
+            },
+        )
+        return result.modified_count == 1
+
+    async def update_full_name(
+        self, user_id: ObjectId, full_name: str
+    ) -> dict[str, Any] | None:
+        """Rename the account, returning the document as it now stands.
+
+        Scoped to one `_id`, which is the caller's own and comes from the
+        token — there is no code path that takes an id from a request body.
+        """
+        return await self._collection.find_one_and_update(
+            {"_id": user_id},
+            {"$set": {"full_name": full_name, "updated_at": datetime.now(UTC)}},
+            return_document=ReturnDocument.AFTER,
+        )
+
+    async def change_password(
+        self, user_id: ObjectId, *, password_hash: str
+    ) -> bool:
+        """Set a new password and sign out everywhere, in one write.
+
+        Same reasoning as `complete_password_reset`: a change that left the
+        old thirty-day refresh sessions alive would not actually lock anybody
+        out, and two separate writes can be interrupted between.
+        """
+        result = await self._collection.update_one(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "password_hash": password_hash,
+                    "refresh_sessions": [],
+                    "updated_at": datetime.now(UTC),
+                }
             },
         )
         return result.modified_count == 1

@@ -12,7 +12,7 @@
   silently weaken the shipped app.
 
   Adding a machine: put its LAN IP here and pass the same address to Flutter
-  with --dart-define=API_BASE_URL. The Dart side is still the single source of
+  with the dart-define API_BASE_URL option. The Dart side is still the single source of
   the URL; this file only says which hosts are allowed to be spoken to in the
   clear.
 -->
