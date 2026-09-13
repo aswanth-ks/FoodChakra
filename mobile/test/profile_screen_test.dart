@@ -89,6 +89,18 @@ class FakeAuthRepository implements AuthRepository {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName} is not used here');
+  /// Not exercised by this file. A stub rather than a fake, so a test that
+  /// reaches it fails loudly instead of quietly passing.
+  @override
+  Future<Account> updateProfile({required String fullName}) =>
+      throw UnimplementedError('updateProfile is not used in this test');
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) => throw UnimplementedError('changePassword is not used in this test');
+
 }
 
 /// Serves the user's own completed records, or fails on demand.
@@ -170,7 +182,10 @@ void main() {
   /// Pumps the real router at /profile, so every assertion is about the
   /// screen the app actually builds.
   Future<GoRouter> pumpProfile(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(390, 1400);
+    // Tall enough that the whole settings list builds. It is a lazy
+    // ListView, so a short viewport silently leaves the lower rows — and the
+    // sign-out button — out of the tree entirely.
+    tester.view.physicalSize = const Size(390, 2600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 

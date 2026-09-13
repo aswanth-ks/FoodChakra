@@ -21,7 +21,7 @@ import '../../rescue/presentation/widgets/stylised_map.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
-    this.userName = 'Aswanth',
+    this.userName = 'there',
     this.location = 'Karur, Tamil Nadu',
     this.opportunityCount = 12,
     this.nearestDistanceLabel = 'Nearest: 650m away',
@@ -45,6 +45,10 @@ class HomeScreen extends StatelessWidget {
     this.onSelectTab,
   });
 
+  /// The signed-in account's own first name. Defaults to a neutral
+  /// greeting rather than a person's name: the router always supplies the
+  /// real one, and a default that names somebody is the kind of thing that
+  /// ships.
   final String userName;
   final String location;
   final int opportunityCount;

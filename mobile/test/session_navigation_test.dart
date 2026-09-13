@@ -98,6 +98,18 @@ class FakeAuthRepository implements AuthRepository {
     required String code,
     required String newPassword,
   }) async {}
+  /// Not exercised by this file. A stub rather than a fake, so a test that
+  /// reaches it fails loudly instead of quietly passing.
+  @override
+  Future<Account> updateProfile({required String fullName}) =>
+      throw UnimplementedError('updateProfile is not used in this test');
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) => throw UnimplementedError('changePassword is not used in this test');
+
 }
 
 class _SlowAuthRepository extends FakeAuthRepository {

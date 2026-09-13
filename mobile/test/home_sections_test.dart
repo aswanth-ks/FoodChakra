@@ -59,6 +59,18 @@ class FakeAuth implements AuthRepository {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName} is not used here');
+  /// Not exercised by this file. A stub rather than a fake, so a test that
+  /// reaches it fails loudly instead of quietly passing.
+  @override
+  Future<Account> updateProfile({required String fullName}) =>
+      throw UnimplementedError('updateProfile is not used in this test');
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) => throw UnimplementedError('changePassword is not used in this test');
+
 }
 
 /// Counts calls so a test can prove Home is not asking twice, and can hold a

@@ -127,6 +127,28 @@ class FakeUserRepository(UserRepository):
     async def revoke_all_refresh_sessions(self, user_id: ObjectId) -> None:
         self.documents[user_id]["refresh_sessions"] = []
 
+    async def update_full_name(
+        self, user_id: ObjectId, full_name: str
+    ) -> dict[str, Any] | None:
+        document = self.documents.get(user_id)
+        if document is None:
+            return None
+        document["full_name"] = full_name
+        document["updated_at"] = datetime.now(UTC)
+        return document
+
+    async def change_password(
+        self, user_id: ObjectId, *, password_hash: str
+    ) -> bool:
+        document = self.documents.get(user_id)
+        if document is None:
+            return False
+        document["password_hash"] = password_hash
+        # A password change signs every device out; the fake must do it too,
+        # or the test that proves it would pass for the wrong reason.
+        document["refresh_sessions"] = []
+        return True
+
     # ----- one-time codes -----
 
     async def set_email_verification(

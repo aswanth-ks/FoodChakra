@@ -69,6 +69,31 @@ class AuthController extends AsyncNotifier<Account?> {
     password: password,
   );
 
+  /// Renames the signed-in account, then publishes the server's copy.
+  ///
+  /// The new state is what the server returned, not what was typed: if it
+  /// trimmed or otherwise adjusted the name, the app shows what was actually
+  /// stored rather than an optimistic guess that could differ.
+  Future<Account> updateProfile({required String fullName}) async {
+    final updated = await _repository.updateProfile(fullName: fullName);
+    state = AsyncValue.data(updated);
+    return updated;
+  }
+
+  /// Changes the password. The server revokes every session, so this signs
+  /// out locally too — leaving the app believing in a session the server has
+  /// already destroyed is how you get a screen full of 401s.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await _repository.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+    await signOut();
+  }
+
   /// Confirms an address. Still no session — the user signs in next.
   Future<void> verifyEmail({
     required String email,

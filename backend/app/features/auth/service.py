@@ -432,6 +432,57 @@ class AuthService:
 
         return await self._issue_tokens(stored)
 
+    # ------------------------------------------------------------- profile
+
+    async def update_profile(self, user_id: str, *, full_name: str) -> UserResponse:
+        """Rename the caller's own account.
+
+        `user_id` comes from the verified token, never from a request body, so
+        there is no shape of request that can name somebody else's account.
+        """
+        stored = await self._repository.find_by_id(user_id)
+        if stored is None:
+            raise UnauthorizedError("Invalid or expired session.")
+
+        updated = await self._repository.update_full_name(
+            stored["_id"], full_name
+        )
+        if updated is None:
+            raise UnauthorizedError("Invalid or expired session.")
+
+        return self.to_response(updated)
+
+    async def change_password(
+        self, user_id: str, *, current_password: str, new_password: str
+    ) -> None:
+        """Replace the password for someone who can prove they know it.
+
+        Knowing the current password is the proof. Without that check an
+        unlocked phone left on a table would be enough to take an account over
+        permanently, which is a bigger hole than any of this is worth.
+
+        Every refresh session is revoked, so a password change actually ends
+        the other sessions rather than only appearing to.
+        """
+        stored = await self._repository.find_by_id(user_id)
+        if stored is None:
+            raise UnauthorizedError("Invalid or expired session.")
+
+        if not verify_password(current_password, stored["password_hash"]):
+            # Deliberately not "wrong password" vs "no such account": the
+            # caller is already authenticated, so the only useful distinction
+            # is whether this attempt was right.
+            raise UnauthorizedError("Your current password is incorrect.")
+
+        if verify_password(new_password, stored["password_hash"]):
+            raise ValidationError("Choose a password you have not used here.")
+
+        changed = await self._repository.change_password(
+            stored["_id"], password_hash=hash_password(new_password)
+        )
+        if not changed:
+            raise UnauthorizedError("Invalid or expired session.")
+
     # -------------------------------------------------------------- logout
 
     async def logout(self, user_id: str, refresh_token: str | None) -> None:

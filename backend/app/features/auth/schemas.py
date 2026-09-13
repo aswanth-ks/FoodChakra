@@ -165,6 +165,48 @@ class ResetPasswordRequest(OtpCode):
         return _validate_password(value)
 
 
+class UpdateProfileRequest(BaseModel):
+    """The fields an account holder may change about themselves.
+
+    Only `full_name`. Email is deliberately absent: changing it would move the
+    address a verification code and a password reset are sent to, so it needs
+    its own confirmed flow rather than riding along with a display name. Role,
+    status and staff level are the server's to decide and are not accepted
+    from a client at all.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("full_name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Full name is required.")
+        return stripped
+
+
+class ChangePasswordRequest(BaseModel):
+    """A password change made by someone who already knows the old one.
+
+    Distinct from the reset flow, which proves identity with an emailed code
+    because the user has forgotten it. Here the current password is the proof,
+    which is what stops a borrowed unlocked phone becoming a stolen account.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _check_new_password(cls, value: str) -> str:
+        return _validate_password(value)
+
+
 # --------------------------------------------------------------- responses
 
 

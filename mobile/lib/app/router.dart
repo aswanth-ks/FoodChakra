@@ -38,7 +38,10 @@ import '../features/rescue/domain/rescue.dart';
 import '../features/rescue/presentation/listing_providers.dart';
 import '../features/rescue/presentation/active_rescue_view.dart';
 import '../features/rescue/presentation/explore_screen.dart' show ExploreResultView;
+import '../features/rescue/presentation/change_password_view.dart';
+import '../features/rescue/presentation/edit_profile_view.dart';
 import '../features/rescue/presentation/explore_view.dart';
+import '../features/rescue/presentation/personal_information_screen.dart';
 import '../features/rescue/presentation/activity_providers.dart';
 import '../features/rescue/presentation/impact_providers.dart';
 import '../features/rescue/presentation/handover_confirmation_view.dart';
@@ -96,6 +99,13 @@ class AppRoutes {
   /// Distinct from [impact], which is the onboarding screen.
   static const String myImpact = '/impact';
   static const String profile = '/profile';
+
+  /// Profile sub-pages. Not in [kPublicRoutes], so the single gate in
+  /// `session_gate.dart` protects them like every other account screen — no
+  /// second auth check is written here.
+  static const String editProfile = '/profile/edit';
+  static const String personalInformation = '/profile/personal';
+  static const String changePassword = '/profile/password';
 
   // Give surplus, a four-step flow. The draft travels in the route's `extra`.
   static const String give = '/give';
@@ -829,15 +839,61 @@ final routerProvider = Provider<GoRouter>((ref) {
               },
               onBack: context.canPop() ? () => context.pop() : null,
               onSelectTab: (tab) => onConsumerTab(context, tab),
+              onEditProfile: () => context.push(AppRoutes.editProfile),
+              onPersonalInformation: () =>
+                  context.push(AppRoutes.personalInformation),
+              onChangePassword: () => context.push(AppRoutes.changePassword),
               // Signing out clears the stored tokens; the router's redirect
               // is what moves the user, so there is no authenticated screen
               // left behind on the stack to pop back to.
               onSignOut: () =>
                   ref.read(authControllerProvider.notifier).signOut(),
-              // Every settings row needs a screen that does not exist yet, so
-              // they stay inert rather than pointing at placeholders.
+              // The remaining settings rows are for features that do not
+              // exist, and say so on the row rather than pretending.
             );
           },
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.editProfile,
+        name: 'editProfile',
+        builder: (context, state) => EditProfileView(
+          onBack: () => context.canPop() ? context.pop() : null,
+          // Straight to Profile rather than popping: saving changes the
+          // session, which refreshes the router, and a pop against a stack
+          // that has just been rebuilt is not reliable. Profile is where the
+          // user wants to be either way, including after a deep link that had
+          // nothing beneath it.
+          onSaved: () => context.go(AppRoutes.profile),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.personalInformation,
+        name: 'personalInformation',
+        builder: (context, state) => Consumer(
+          builder: (context, ref, _) {
+            final account = ref.watch(authControllerProvider).value;
+            // The gate has already refused an unauthenticated visitor; this
+            // only covers the frame in which a sign-out is settling.
+            if (account == null) return const LoaderView();
+
+            return PersonalInformationScreen(
+              fullName: account.fullName,
+              email: account.email,
+              role: account.role,
+              emailVerified: account.emailVerified,
+              memberSince: account.createdAt,
+              onBack: () => context.canPop() ? context.pop() : null,
+              onEdit: () => context.push(AppRoutes.editProfile),
+            );
+          },
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.changePassword,
+        name: 'changePassword',
+        builder: (context, state) => ChangePasswordView(
+          onBack: () => context.canPop() ? context.pop() : null,
         ),
       ),
       GoRoute(

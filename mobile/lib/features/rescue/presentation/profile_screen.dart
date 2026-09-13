@@ -35,15 +35,7 @@ class ProfileScreen extends StatelessWidget {
     this.onBack,
     this.onEditProfile,
     this.onPersonalInformation,
-    this.onSavedLocations,
-    this.onFoodPreferences,
-    this.onNotifications,
-    this.onPrivacy,
-    this.onSafetyInformation,
-    this.onHelpCenter,
-    this.onContactSupport,
-    this.onTerms,
-    this.onPrivacyPolicy,
+    this.onChangePassword,
     this.onSignOut,
     this.onSelectTab,
   });
@@ -87,15 +79,10 @@ class ProfileScreen extends StatelessWidget {
 
   final VoidCallback? onEditProfile;
   final VoidCallback? onPersonalInformation;
-  final VoidCallback? onSavedLocations;
-  final VoidCallback? onFoodPreferences;
-  final VoidCallback? onNotifications;
-  final VoidCallback? onPrivacy;
-  final VoidCallback? onSafetyInformation;
-  final VoidCallback? onHelpCenter;
-  final VoidCallback? onContactSupport;
-  final VoidCallback? onTerms;
-  final VoidCallback? onPrivacyPolicy;
+
+  /// Opens the change-password screen. Every other settings row below is for
+  /// something that does not exist yet and says so.
+  final VoidCallback? onChangePassword;
 
   /// Invoked once the user confirms in the dialog, never straight from the
   /// button — signing out is destructive and the design offers no undo.
@@ -190,10 +177,15 @@ class ProfileScreen extends StatelessWidget {
                             onTap: onPersonalInformation,
                           ),
                           _MenuEntry(
+                            icon: Icons.key_outlined,
+                            title: 'Change password',
+                            subtitle: 'Signs you out everywhere',
+                            onTap: onChangePassword,
+                          ),
+                          const _MenuEntry.unavailable(
                             icon: Icons.location_on_outlined,
                             title: 'Saved locations',
                             subtitle: 'Manage pickup locations',
-                            onTap: onSavedLocations,
                           ),
                         ],
                       ),
@@ -201,17 +193,15 @@ class ProfileScreen extends StatelessWidget {
                       _SettingsSection(
                         title: 'Preferences',
                         entries: [
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.restaurant_menu_rounded,
                             title: 'Food preferences',
                             subtitle: 'Dietary and rescue preferences',
-                            onTap: onFoodPreferences,
                           ),
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.notifications_none_rounded,
                             title: 'Notifications',
                             subtitle: 'Rescue updates and reminders',
-                            onTap: onNotifications,
                           ),
                         ],
                       ),
@@ -219,17 +209,15 @@ class ProfileScreen extends StatelessWidget {
                       _SettingsSection(
                         title: 'Privacy & safety',
                         entries: [
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.lock_outline_rounded,
                             title: 'Privacy',
                             subtitle: 'Location and account privacy',
-                            onTap: onPrivacy,
                           ),
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.shield_outlined,
                             title: 'Safety information',
                             subtitle: 'Food rescue safety guidance',
-                            onTap: onSafetyInformation,
                           ),
                         ],
                       ),
@@ -237,17 +225,15 @@ class ProfileScreen extends StatelessWidget {
                       _SettingsSection(
                         title: 'Help & support',
                         entries: [
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.help_outline_rounded,
                             title: 'Help center',
                             subtitle: 'Get answers to common questions',
-                            onTap: onHelpCenter,
                           ),
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.chat_bubble_outline_rounded,
                             title: 'Contact support',
                             subtitle: 'Need help with FoodLoop?',
-                            onTap: onContactSupport,
                           ),
                         ],
                       ),
@@ -255,15 +241,13 @@ class ProfileScreen extends StatelessWidget {
                       _SettingsSection(
                         title: 'About',
                         entries: [
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.description_outlined,
                             title: 'Terms of service',
-                            onTap: onTerms,
                           ),
-                          _MenuEntry(
+                          const _MenuEntry.unavailable(
                             icon: Icons.privacy_tip_outlined,
                             title: 'Privacy policy',
-                            onTap: onPrivacyPolicy,
                           ),
                         ],
                       ),
@@ -625,7 +609,20 @@ class _MenuEntry {
     required this.title,
     this.subtitle,
     this.onTap,
-  });
+  }) : available = true;
+
+  /// A row for something that does not exist yet.
+  ///
+  /// Shown greyed, badged, and inert. The alternative — leaving the row
+  /// looking exactly like a working one and wiring it to nothing — is worse
+  /// than either building it or removing it: the user presses it, nothing
+  /// happens, and they cannot tell whether the app is broken or they are.
+  const _MenuEntry.unavailable({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+  }) : onTap = null,
+       available = false;
 
   final IconData icon;
   final String title;
@@ -634,6 +631,9 @@ class _MenuEntry {
   final String? subtitle;
 
   final VoidCallback? onTap;
+
+  /// False for a row whose destination does not exist yet.
+  final bool available;
 }
 
 /// Uppercase heading plus a white card of hairline-divided rows.
@@ -693,11 +693,16 @@ class _SettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final available = entry.available;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: entry.onTap,
-        child: Padding(
+        child: Opacity(
+          // Unmistakably not ready, without moving anything.
+          opacity: available ? 1 : 0.45,
+          child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
@@ -736,12 +741,29 @@ class _SettingsRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: _chevron,
-              ),
+              if (available)
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: _chevron,
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEDF0EE),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    'Soon',
+                    style: rescueFont(10.5, 700, color: _labelMuted),
+                  ),
+                ),
             ],
+          ),
           ),
         ),
       ),

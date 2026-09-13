@@ -102,6 +102,33 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<Account> updateProfile({required String fullName}) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/auth/me',
+      data: {'full_name': fullName},
+    );
+    final data = response.data;
+    if (data == null) throw const UnknownFailure();
+    return AccountDto.fromJson(data).toDomain();
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    // Neither value is logged, held, or echoed anywhere. The request body is
+    // the only place either one exists on this device.
+    await _dio.post<void>(
+      '/auth/change-password',
+      data: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      },
+    );
+  }
+
+  @override
   Future<Account?> restoreSession() async {
     final token = await _storage.readAccessToken();
     if (token == null) return null;
