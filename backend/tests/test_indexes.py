@@ -6,6 +6,8 @@ failures that actually happen — a collection with no indexes declared, a
 duplicate index name, or the claim index losing its partial filter.
 """
 
+from collections.abc import AsyncIterator
+
 import pytest
 from pymongo import IndexModel
 
@@ -15,19 +17,35 @@ from app.shared.lifecycle import RESCUE_ACTIVE_STATES
 
 
 class FakeCollection:
-    def __init__(self, name: str, recorder: dict[str, list[IndexModel]]) -> None:
+    def __init__(
+        self,
+        name: str,
+        recorder: dict[str, list[IndexModel]],
+        existing: set[str],
+    ) -> None:
         self._name = name
         self._recorder = recorder
+        self._existing = existing
+
+    async def list_indexes(self) -> AsyncIterator[dict[str, str]]:
+        # Mongo always reports the implicit `_id_` index; nothing in
+        # INDEX_SPECS is named that, so it is inert here and present for
+        # fidelity.
+        yield {"name": "_id_"}
+        for name in sorted(self._existing):
+            yield {"name": name}
 
     async def create_indexes(self, models: list[IndexModel]) -> list[str]:
-        self._recorder[self._name] = models
+        self._recorder.setdefault(self._name, []).extend(models)
         return [model.document["name"] for model in models]
 
 
 class FakeDatabase:
-    def __init__(self) -> None:
+    def __init__(self, existing: dict[str, set[str]] | None = None) -> None:
         self.created: dict[str, list[IndexModel]] = {}
         self.pinged = False
+        #: Index names the database already holds, per collection.
+        self.existing = existing or {}
 
     async def command(self, name: str) -> dict[str, int]:
         assert name == "ping"
@@ -35,7 +53,7 @@ class FakeDatabase:
         return {"ok": 1}
 
     def __getitem__(self, name: str) -> FakeCollection:
-        return FakeCollection(name, self.created)
+        return FakeCollection(name, self.created, self.existing.get(name, set()))
 
 
 @pytest.fixture
@@ -139,3 +157,75 @@ def test_rejected_collections_are_not_reintroduced():
         "donations",
     }
     assert not rejected & set(col.ALL_COLLECTIONS)
+
+
+# ------------------------------------------------- skipping what already exists
+
+
+async def test_indexes_that_already_exist_are_not_recreated():
+    """The common case on every boot: everything is already in place.
+
+    Measured against the deployed database, calling `create_indexes` for all
+    ten collections regardless cost 6.4 seconds of startup — on a host that
+    scales to zero, 6.4 seconds added to the first request after every idle
+    period. Nothing needs creating here, so nothing should be created.
+    """
+    already_there = {
+        name: {model.document["name"] for model in models}
+        for name, models in INDEX_SPECS.items()
+    }
+    db = FakeDatabase(existing=already_there)
+
+    await ensure_indexes(db)
+
+    assert db.pinged is True
+    assert db.created == {}
+
+
+async def test_a_missing_index_is_still_created():
+    """Skipping must never mean skipping something that is not there."""
+    already_there = {
+        name: {model.document["name"] for model in models}
+        for name, models in INDEX_SPECS.items()
+    }
+    # One index has gone missing from listings.
+    dropped = sorted(already_there[col.LISTINGS])[0]
+    already_there[col.LISTINGS].remove(dropped)
+    db = FakeDatabase(existing=already_there)
+
+    await ensure_indexes(db)
+
+    created = [m.document["name"] for m in db.created.get(col.LISTINGS, [])]
+    assert created == [dropped]
+    # And only that one — no other collection was touched.
+    assert set(db.created) == {col.LISTINGS}
+
+
+async def test_an_empty_database_gets_every_index():
+    """A fresh deployment must still be fully indexed."""
+    db = FakeDatabase()
+
+    await ensure_indexes(db)
+
+    for name, models in INDEX_SPECS.items():
+        created = {m.document["name"] for m in db.created[name]}
+        assert created == {m.document["name"] for m in models}
+
+
+async def test_the_unique_active_rescue_guard_is_never_skipped_when_absent():
+    """The constraint that stops one listing being claimed twice.
+
+    Named explicitly because it is the one index whose absence would be a
+    correctness bug rather than a slow query.
+    """
+    already_there = {
+        name: {model.document["name"] for model in models}
+        for name, models in INDEX_SPECS.items()
+    }
+    already_there[col.RESCUES].discard("uniq_active_rescue_per_listing")
+    db = FakeDatabase(existing=already_there)
+
+    await ensure_indexes(db)
+
+    created = [m.document["name"] for m in db.created[col.RESCUES]]
+    assert "uniq_active_rescue_per_listing" in created
