@@ -22,10 +22,12 @@ silently leaves the old index behind.
 """
 
 import logging
+import time
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo import ASCENDING, DESCENDING, GEOSPHERE, IndexModel
 
+from app.core.startup_timing import startup_timing
 from app.db import collections as col
 from app.shared.lifecycle import RESCUE_ACTIVE_STATES
 
@@ -245,7 +247,13 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     usual trade for this pattern, and it is worth stating: the previous code
     would have raised `IndexOptionsConflict` and refused to start.
     """
+    # Timed separately from the index work below. Motor connects lazily, so
+    # this first command is what actually pays for the connection: SRV lookup,
+    # TLS, authentication and topology discovery. Folding it into "index
+    # bootstrap" attributed several seconds to the wrong thing.
+    ping_began = time.monotonic()
     await db.command("ping")
+    startup_timing.ping_ms = int((time.monotonic() - ping_began) * 1000)
 
     created_total = 0
     for collection_name, models in INDEX_SPECS.items():

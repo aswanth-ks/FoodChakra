@@ -33,7 +33,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.info("MongoDB connected to database: %s", mongo.database.name)
         indexes_began = time.monotonic()
         await ensure_indexes(mongo.database)
-        startup_timing.indexes_ms = int((time.monotonic() - indexes_began) * 1000)
+        # `ensure_indexes` records its own ping separately; what is left here
+        # is the index work itself.
+        startup_timing.indexes_ms = int(
+            (time.monotonic() - indexes_began) * 1000
+        ) - (startup_timing.ping_ms or 0)
         logger.info("MongoDB indexes initialized")
 
     startup_timing.total_ms = int((time.monotonic() - began) * 1000)

@@ -24,13 +24,23 @@ class StartupTiming:
     #: close to "the Python process started" as the application can see.
     process_started_at: float = field(default_factory=time.monotonic)
 
+    #: Building the client object. Motor connects lazily, so this is close to
+    #: zero and is *not* the cost of reaching the database.
     connect_ms: int | None = None
+
+    #: The first real command. This is where the connection is actually
+    #: established — SRV lookup, TLS, authentication, topology discovery.
+    ping_ms: int | None = None
+
+    #: Listing and, where necessary, creating indexes.
     indexes_ms: int | None = None
+
     total_ms: int | None = None
 
     def as_dict(self) -> dict[str, int | None]:
         return {
             "connect_ms": self.connect_ms,
+            "ping_ms": self.ping_ms,
             "indexes_ms": self.indexes_ms,
             "total_ms": self.total_ms,
         }

@@ -21,6 +21,7 @@ class StartupTimingResponse(BaseModel):
     """
 
     connect_ms: int | None = None
+    ping_ms: int | None = None
     indexes_ms: int | None = None
     total_ms: int | None = None
 
