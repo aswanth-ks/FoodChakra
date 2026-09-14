@@ -21,6 +21,7 @@ index gets an auto-generated name that changes when the keys change, which
 silently leaves the old index behind.
 """
 
+import asyncio
 import logging
 import time
 
@@ -255,25 +256,35 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.command("ping")
     startup_timing.ping_ms = int((time.monotonic() - ping_began) * 1000)
 
-    created_total = 0
-    for collection_name, models in INDEX_SPECS.items():
-        collection = db[collection_name]
-        existing = {index["name"] async for index in collection.list_indexes()}
-        missing = [
-            model for model in models if model.document["name"] not in existing
-        ]
-        if not missing:
-            continue
-
-        created = await collection.create_indexes(missing)
-        created_total += len(created)
-        logger.info(
-            "Indexes created on %r: %s", collection_name, ", ".join(created)
+    # Concurrently, because the ten collections are independent and each check
+    # is a full round trip to a database that is not in this datacentre. Run in
+    # sequence they measured 2.9s of startup; run together the cost is roughly
+    # one round trip.
+    results = await asyncio.gather(
+        *(
+            _ensure_collection(db, collection_name, models)
+            for collection_name, models in INDEX_SPECS.items()
         )
+    )
 
     logger.info(
         "Index bootstrap complete — %d created, %d required across %d collections",
-        created_total,
+        sum(results),
         sum(len(models) for models in INDEX_SPECS.values()),
         len(INDEX_SPECS),
     )
+
+
+async def _ensure_collection(
+    db: AsyncIOMotorDatabase, collection_name: str, models: list[IndexModel]
+) -> int:
+    """Bring one collection up to spec. Returns how many indexes were created."""
+    collection = db[collection_name]
+    existing = {index["name"] async for index in collection.list_indexes()}
+    missing = [model for model in models if model.document["name"] not in existing]
+    if not missing:
+        return 0
+
+    created = await collection.create_indexes(missing)
+    logger.info("Indexes created on %r: %s", collection_name, ", ".join(created))
+    return len(created)
