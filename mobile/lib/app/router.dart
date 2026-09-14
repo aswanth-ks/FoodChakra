@@ -647,7 +647,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               listings: listings,
               listingsLoading: nearby.isLoading,
               listingsError: nearby.error,
-              onRetryListings: () => ref.invalidate(nearbyListingsProvider),
+              // Drops the location too. Invalidating only the listings
+              // provider recomputed it from a cached `LocationUnavailable`
+              // and failed without reaching the network, which is what made
+              // this button do nothing.
+              onRetryListings: ref.refreshNearbyFood,
+              onEnableLocation: ref.refreshNearbyFood,
               // Counts stay honest while the query is still out: no total is
               // claimed until one is known.
               opportunityCount: nearby.hasValue ? listings.length : 0,

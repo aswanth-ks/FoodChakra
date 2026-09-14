@@ -188,6 +188,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     listings: listings,
                     emptyMessage: widget.emptyMessage,
                     onOpenListing: widget.onOpenListing,
+                    onRetry: widget.onRetry,
                     tileProvider: widget.tileProvider,
                   )
                 else if (listings.isEmpty)
@@ -1015,6 +1016,7 @@ class _ResultsMap extends StatelessWidget {
     required this.listings,
     this.emptyMessage,
     this.onOpenListing,
+    this.onRetry,
     this.tileProvider,
   });
 
@@ -1026,6 +1028,11 @@ class _ResultsMap extends StatelessWidget {
   final String? emptyMessage;
 
   final void Function(FoodListing listing)? onOpenListing;
+
+  /// Re-resolves the location for the no-location state. Same action as the
+  /// list's retry, because both are blocked on the same missing thing.
+  final VoidCallback? onRetry;
+
   final TileProvider? tileProvider;
 
   @override
@@ -1080,6 +1087,25 @@ class _ResultsMap extends StatelessWidget {
               textAlign: TextAlign.center,
               style: rescueFont(12.5, 400, color: RescueColors.muted),
             ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: onRetry,
+                style: TextButton.styleFrom(
+                  foregroundColor: RescueColors.primary,
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Enable location',
+                  style: rescueFont(13, 600, color: RescueColors.primary),
+                ),
+              ),
+            ],
           ],
         ),
       );

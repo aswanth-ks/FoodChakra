@@ -47,8 +47,11 @@ class _ExploreViewState extends ConsumerState<ExploreView> {
   /// recompute from the same cached failure and never reach the network,
   /// leaving a "Try again" button that does nothing.
   void _invalidateResults() {
+    // The location as well: it is cached for the life of the app, errors
+    // included, so a retry that leaves it in place can never recover from a
+    // failed location attempt.
+    ref.refreshNearbyFood();
     ref.invalidate(exploreListingsProvider(_filter));
-    ref.invalidate(nearbyListingsProvider);
   }
 
   /// Refetches from the backend rather than re-rendering what is cached, so a

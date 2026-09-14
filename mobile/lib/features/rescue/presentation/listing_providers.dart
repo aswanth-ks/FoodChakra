@@ -119,6 +119,26 @@ Future<void> _refreshLocationInBackground(
   }
 }
 
+/// Re-runs the nearby query from scratch, location included.
+///
+/// This exists because "Try again" used to be a dead button. The nearby query
+/// depends on [currentOriginProvider], which is not `autoDispose` and so keeps
+/// its value — including its *error* — for the life of the app. Once a
+/// location attempt failed, invalidating only the listings provider recomputed
+/// it from that same cached `LocationUnavailable` and failed again instantly,
+/// with no request ever reaching the network. The only way out was to kill the
+/// app.
+///
+/// Dropping the origin first is what makes the retry real: the location is
+/// resolved again (memory, then the remembered fix, then the device), and only
+/// then is the listings query re-run.
+extension NearbyRefresh on WidgetRef {
+  void refreshNearbyFood() {
+    invalidate(currentOriginProvider);
+    invalidate(nearbyListingsProvider);
+  }
+}
+
 /// Claimable surplus near the device. Backs Home.
 final nearbyListingsProvider = FutureProvider.autoDispose<List<FoodListing>>((
   ref,

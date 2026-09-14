@@ -5,8 +5,13 @@ import logging
 from pymongo.errors import PyMongoError
 
 from app.core.config import get_settings
+from app.core.startup_timing import startup_timing
 from app.features.health.repository import HealthRepository
-from app.features.health.schemas import DatabaseHealth, HealthResponse
+from app.features.health.schemas import (
+    DatabaseHealth,
+    HealthResponse,
+    StartupTimingResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +28,10 @@ class HealthService:
             app=settings.APP_NAME,
             environment=settings.ENVIRONMENT,
             database=database,
+            # Read from the process, not measured here: this is how long the
+            # *startup* took, which is the thing a slow first request needs
+            # explaining, and it costs nothing to report.
+            startup=StartupTimingResponse(**startup_timing.as_dict()),
         )
 
     async def _check_database(self) -> DatabaseHealth:

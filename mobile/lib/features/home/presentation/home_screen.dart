@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' show TileProvider;
 
 import '../../../core/error/failures.dart';
+import '../../../core/location/location_providers.dart';
 import '../../../core/map/foodloop_map.dart';
 import '../../../core/map/geo_point.dart';
 import '../../../shared/widgets/consumer_nav_bar.dart';
@@ -29,6 +30,7 @@ class HomeScreen extends StatelessWidget {
     this.listingsLoading = false,
     this.listingsError,
     this.onRetryListings,
+    this.onEnableLocation,
     this.mealsRescued,
     this.foodDivertedKg,
     this.onChangeLocation,
@@ -69,6 +71,13 @@ class HomeScreen extends StatelessWidget {
   final Object? listingsError;
 
   final VoidCallback? onRetryListings;
+
+  /// Asks for the location again, for the state where there is no fix.
+  ///
+  /// Separate from [onRetryListings] only in what it says to the user — both
+  /// re-resolve the location and then re-run the query, because a nearby
+  /// search with no origin is not a search at all.
+  final VoidCallback? onEnableLocation;
 
   /// Completed rescues, or null while that count is still loading.
   ///
@@ -150,6 +159,7 @@ class HomeScreen extends StatelessWidget {
                         nearestDistanceLabel: nearestDistanceLabel,
                         onExploreNearby: onExploreNearby,
                         onOpenMap: onOpenMap,
+                        onEnableLocation: onEnableLocation,
                         origin: origin,
                         listings: listings,
                         tileProvider: tileProvider,
@@ -198,6 +208,12 @@ class HomeScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       if (listingsLoading)
                         const _ListingsSkeleton()
+                      // A missing location is not a failed search. Saying
+                      // "couldn't load nearby food" when the real problem is
+                      // that nobody knows where the user is sends them
+                      // pressing a retry that cannot work.
+                      else if (listingsError is LocationUnavailable)
+                        _LocationNeeded(onEnable: onEnableLocation)
                       else if (listingsError != null)
                         _SectionError(
                           error: listingsError!,
@@ -301,6 +317,67 @@ class _NoListingsNearby extends StatelessWidget {
 }
 
 /// One section failing must not take the page with it.
+/// Shown when there is no location to search from.
+///
+/// Deliberately distinct from [_SectionError]: the fix is on the device, not
+/// the network, and the wording has to say which.
+class _LocationNeeded extends StatelessWidget {
+  const _LocationNeeded({this.onEnable});
+
+  final VoidCallback? onEnable;
+
+  @override
+  Widget build(BuildContext context) {
+    return RescueCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.location_off_outlined,
+                size: 18,
+                color: RescueColors.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Location is unavailable',
+                  style: rescueFont(15, 700, color: RescueColors.ink),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Turn on location to see food near you.',
+            style: rescueFont(13, 400, color: RescueColors.muted, height: 1.45),
+          ),
+          if (onEnable != null) ...[
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: onEnable,
+              style: TextButton.styleFrom(
+                foregroundColor: RescueColors.primary,
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 6,
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Enable location',
+                style: rescueFont(13, 600, color: RescueColors.primary),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _SectionError extends StatelessWidget {
   const _SectionError({required this.error, this.onRetry});
 
@@ -445,6 +522,7 @@ class _LiveHeroCard extends StatelessWidget {
     required this.nearestDistanceLabel,
     this.onExploreNearby,
     this.onOpenMap,
+    this.onEnableLocation,
     this.origin,
     this.listings = const [],
     this.tileProvider,
@@ -454,6 +532,7 @@ class _LiveHeroCard extends StatelessWidget {
   final String nearestDistanceLabel;
   final VoidCallback? onExploreNearby;
   final VoidCallback? onOpenMap;
+  final VoidCallback? onEnableLocation;
   final GeoPoint? origin;
   final List<FoodListing> listings;
   final TileProvider? tileProvider;
@@ -516,18 +595,27 @@ class _LiveHeroCard extends StatelessWidget {
                   _MapPreview(
                     origin: origin,
                     listings: listings,
-                    onTap: onOpenMap,
+                    onTap: origin == null ? null : onOpenMap,
                     tileProvider: tileProvider,
                   ),
                   Positioned(
                     left: 10,
                     bottom: 10,
-                    child: _MapBadge(label: nearestDistanceLabel),
+                    child: _MapBadge(
+                      // Says what is actually true. Claiming a nearest
+                      // distance with no location to measure from is the kind
+                      // of small lie that makes the rest untrustworthy.
+                      label: origin == null
+                          ? 'Location needed'
+                          : nearestDistanceLabel,
+                    ),
                   ),
                   Positioned(
                     right: 10,
                     bottom: 10,
-                    child: _ExploreButton(onPressed: onExploreNearby),
+                    child: origin == null
+                        ? _EnableLocationButton(onPressed: onEnableLocation)
+                        : _ExploreButton(onPressed: onExploreNearby),
                   ),
                 ],
               ),
@@ -594,6 +682,40 @@ class _MapPreview extends StatelessWidget {
             tileProvider: tileProvider,
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Replaces "Explore nearby" when there is no location to explore from.
+///
+/// The card keeps the design's illustration behind it rather than going blank:
+/// the map is decorative in this state and does not pretend to show where
+/// anybody is, but the card still has to offer the one action that helps.
+class _EnableLocationButton extends StatelessWidget {
+  const _EnableLocationButton({this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: RescueColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+      icon: const Icon(Icons.my_location, size: 14),
+      label: Text(
+        'Enable location',
+        style: rescueFont(12.5, 600, color: Colors.white),
       ),
     );
   }
