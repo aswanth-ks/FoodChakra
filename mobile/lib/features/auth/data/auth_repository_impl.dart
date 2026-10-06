@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/config/env.dart';
+import '../../../core/network/cold_start_interceptor.dart';
 import '../../../core/error/failures.dart';
 import '../domain/account.dart';
 import '../domain/auth_repository.dart';
@@ -182,7 +183,24 @@ class AuthRepositoryImpl implements AuthRepository {
 
   Future<Account> _authenticate(String path, Map<String, dynamic> body) async {
     try {
-      final response = await _dio.post<Map<String, dynamic>>(path, data: body);
+      final response = await _dio.post<Map<String, dynamic>>(
+        path,
+        data: body,
+        // Signing in is the one request that must survive a cold backend.
+        //
+        // The deployed API sleeps when idle and takes ~27-32s to wake
+        // (measured). The ordinary 10s budget is right for a warm server, so
+        // every first sign-in after an idle period timed out — and
+        // `ColdStartInterceptor` could not rescue it, because that retries GET
+        // only and a login is a POST.
+        //
+        // A longer budget rather than a retry, deliberately: replaying a POST
+        // is how one tap becomes two sessions, and the rule that mutations are
+        // never auto-retried is worth more than the few seconds it saves. The
+        // user is watching a spinner they started, which is the one moment
+        // waiting is acceptable.
+        options: Options(receiveTimeout: ColdStartInterceptor.wakeTimeout),
+      );
       final data = response.data;
       if (data == null) {
         throw const ServerFailure('The server returned an empty response.');

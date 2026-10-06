@@ -7,7 +7,9 @@ import 'package:foodloop/core/config/env.dart';
 import 'package:foodloop/core/error/failures.dart';
 import 'package:foodloop/core/error/retry_policy.dart';
 import 'package:foodloop/core/location/location_providers.dart';
+import 'package:foodloop/core/auth/token_storage.dart';
 import 'package:foodloop/core/network/cold_start_interceptor.dart';
+import 'package:foodloop/features/auth/data/auth_repository_impl.dart';
 
 /// Times out the first [failures] requests, then answers.
 class _ColdAdapter implements HttpClientAdapter {
@@ -98,6 +100,8 @@ void main() {
     });
   });
 
+  _coldStartSignIn();
+
   group('cold start', () {
     test('a timed-out read is retried once, on a longer budget', () async {
       // Measured: first request after idle 36.0s, second 1.4s, rest 0.94s.
@@ -173,4 +177,88 @@ class _RefusingAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+// ------------------------------------------------- signing in on a cold host
+
+/// Accepts tokens and forgets them. Signing in writes a pair; nothing in
+/// these tests reads them back.
+class _NullTokenStorage implements TokenStorage {
+  @override
+  Future<void> save({
+    required String accessToken,
+    required String refreshToken,
+  }) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName} is not used here');
+}
+
+/// Records the budget each request was sent with.
+class _BudgetRecorder implements HttpClientAdapter {
+  final budgets = <String, Duration?>{};
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    budgets[options.path] = options.receiveTimeout;
+    return ResponseBody.fromString(
+      '{"access_token":"a","refresh_token":"r","expires_at":"2026-01-01T00:00:00Z",'
+      '"user":{"id":"u1","email":"a@b.c","full_name":"A","role":"consumer",'
+      '"status":"active","email_verified":true,"is_staff":false,'
+      '"created_at":"2026-01-01T00:00:00Z"}}',
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+void _coldStartSignIn() {
+  group('signing in on a cold host', () {
+    test('login really is sent with the long budget', () async {
+      // Measured: the deployed API sleeps when idle and takes ~27-32s to
+      // wake. With the ordinary 10s budget every first sign-in after an idle
+      // period timed out, and the cold-start retry could not help because it
+      // is GET-only and a login is a POST.
+      final adapter = _BudgetRecorder();
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: 'https://example.invalid',
+          receiveTimeout: Env.receiveTimeout,
+        ),
+      )..httpClientAdapter = adapter;
+
+      await AuthRepositoryImpl(dio, _NullTokenStorage()).signIn(
+        email: 'a@b.c',
+        password: 'irrelevant-to-this-test',
+      );
+
+      expect(adapter.budgets['/auth/login'], ColdStartInterceptor.wakeTimeout);
+      expect(
+        ColdStartInterceptor.wakeTimeout,
+        greaterThan(const Duration(seconds: 32)),
+        reason: 'must outlast the measured wake',
+      );
+    });
+
+    test('a login is still never replayed automatically', () async {
+      // The longer budget is deliberately *instead of* a retry: replaying a
+      // POST is how one tap becomes two sessions.
+      final adapter = _ColdAdapter(failures: 5);
+      await expectLater(
+        _client(adapter).post<Map<String, dynamic>>('/auth/login'),
+        throwsA(isA<DioException>()),
+      );
+      expect(adapter.attempts, 1);
+    });
+  });
 }
